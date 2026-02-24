@@ -7,8 +7,10 @@ import PrimaryButton from "../../components/PrimaryButton";
 
 type Entry = {
   id: string;
-  label: string;
-  value: string | null;
+  exercise: string | null;
+  reps: number | null;
+  time: string | null;
+  weight: number | null;
   notes: string | null;
 };
 
@@ -157,9 +159,11 @@ export default function HomeScreen() {
             {todaysWorkout.workout_entries?.length ? (
               todaysWorkout.workout_entries.map((e) => (
                 <View key={e.id} style={{ borderWidth: 1, borderRadius: 14, padding: 12, gap: 6 }}>
-                  <Text style={{ fontWeight: "700" }}>{e.label}</Text>
-                  {!!e.value && <Text style={{ opacity: 0.8 }}>{e.value}</Text>}
-                  {!!e.notes && <Text style={{ opacity: 0.8 }}>{e.notes}</Text>}
+                  <Text style={{ fontWeight: "700" }}>{e.exercise ?? "Entry"}</Text>
+{!!e.reps && <Text style={{ opacity: 0.8 }}>Reps: {e.reps}</Text>}
+{!!e.time && <Text style={{ opacity: 0.8 }}>Time: {e.time}</Text>}
+{e.weight !== null && <Text style={{ opacity: 0.8 }}>Weight: {e.weight}</Text>}
+{!!e.notes && <Text style={{ opacity: 0.8 }}>{e.notes}</Text>}
                 </View>
               ))
             ) : (

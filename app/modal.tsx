@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,26 +9,93 @@ import {
   Animated,
   Easing,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import PrimaryButton from "../components/PrimaryButton";
 import { supabase } from "../lib/supabase";
 import { formatYMD } from "../lib/date";
-import { useLocalSearchParams } from "expo-router";
 
 type ToastState = { open: boolean; message: string };
+
+// ---- Shared input styling (dark-mode safe) ----
+const placeholderColor = "#8A8A8A";
+const inputStyle = {
+  borderWidth: 1,
+  borderRadius: 12,
+  padding: 12,
+  backgroundColor: "white",
+  color: "black",
+} as const;
+
+type EntryDraft = {
+  exercise: string;
+
+  // shared
+  sets: string;
+  notes: string;
+
+  // track
+  reps: string;
+  set_times: string[][];
+  activeSet: number;
+  timesApplicable: boolean;
+
+  // lift (per set)
+  lift_reps: string[];
+  lift_weights: string[];
+
+  // optional track-only weight (sled/medball/etc.)
+  weight: string;
+};
+
+function toPosInt(s: string) {
+  const n = parseInt(s, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function resizeFlat(arr: string[], n: number) {
+  const next = arr.slice(0, n);
+  while (next.length < n) next.push("");
+  return next;
+}
+
+function resizeSetTimes(prev: string[][], setsN: number, repsN: number) {
+  const next: string[][] = [];
+
+  for (let s = 0; s < setsN; s++) {
+    const existingRow = prev[s] ?? [];
+    const row = existingRow.slice(0, repsN);
+    while (row.length < repsN) row.push("");
+    next.push(row);
+  }
+  return next;
+}
 
 export default function ModalScreen() {
   const params = useLocalSearchParams<{ date?: string }>();
 
-const [date] = useState(() =>
-  typeof params.date === "string"
-    ? params.date
-    : formatYMD(new Date())
-);
+  const [date] = useState(() =>
+    typeof params.date === "string" ? params.date : formatYMD(new Date())
+  );
+
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [workoutType, setWorkoutType] = useState<"track" | "lift">("track");
-  const [entries, setEntries] = useState<string[]>([""]);
+  const isLift = workoutType === "lift";
+
+  const [entries, setEntries] = useState<EntryDraft[]>([
+    {
+      exercise: "",
+      sets: "",
+      notes: "",
+      reps: "",
+      set_times: [[]],
+      activeSet: 0,
+      lift_reps: [""],
+      lift_weights: [""],
+      weight: "",
+      timesApplicable: true,
+    },
+  ]);
 
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -39,13 +106,12 @@ const [date] = useState(() =>
   });
 
   // --- Toast animation ---
-  const translateY = useRef(new Animated.Value(30)).current; // starts slightly down
+  const translateY = useRef(new Animated.Value(30)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
   const showToast = (message: string) => {
     setToast({ open: true, message });
 
-    // reset first (in case it was mid-animation)
     translateY.setValue(30);
     opacity.setValue(0);
 
@@ -82,34 +148,117 @@ const [date] = useState(() =>
     ]).start(() => setToast((t) => ({ ...t, open: false })));
   };
 
-  // Auto-dismiss + navigate back to Log
+  // Auto-dismiss + navigate back to Workouts tab
   useEffect(() => {
     if (!toast.open) return;
 
     const t = setTimeout(() => {
       hideToast();
-      // This will “close” modal routing and land on log tab.
       router.replace("/(tabs)/log");
     }, 900);
 
     return () => clearTimeout(t);
   }, [toast.open]);
 
-  // --- Entries helpers ---
+  // ---- Entry helpers ----
   function addEntry() {
-    setEntries((prev) => [...prev, ""]);
+    setEntries((prev) => [
+      ...prev,
+      {
+        exercise: "",
+        sets: "",
+        notes: "",
+        reps: "",
+        set_times: [[]],
+        activeSet: 0,
+        lift_reps: [""],
+        lift_weights: [""],
+        weight: "",
+        timesApplicable: true,
+      },
+    ]);
   }
-  function updateEntry(index: number, value: string) {
-    setEntries((prev) => {
-      const copy = [...prev];
-      copy[index] = value;
-      return copy;
-    });
-  }
+
   function removeEntry(index: number) {
     setEntries((prev) => {
       const copy = prev.filter((_, i) => i !== index);
-      return copy.length ? copy : [""];
+      return copy.length
+        ? copy
+        : [
+            {
+              exercise: "",
+              sets: "",
+              notes: "",
+              reps: "",
+              set_times: [[]],
+              activeSet: 0,
+              lift_reps: [""],
+              lift_weights: [""],
+              weight: "",
+              timesApplicable: true,
+            },
+          ];
+    });
+  }
+
+  function updateEntryField(index: number, patch: Partial<EntryDraft>) {
+    setEntries((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], ...patch };
+      return copy;
+    });
+  }
+
+  // TRACK: sets/reps resize set_times (string[][])
+  function updateTrackSetsOrReps(index: number, key: "sets" | "reps", value: string) {
+    setEntries((prev) => {
+      const copy = [...prev];
+      const cur = copy[index];
+      const next = { ...cur, [key]: value };
+
+      const setsN = Math.max(toPosInt(next.sets), 1);
+      const repsN = Math.max(toPosInt(next.reps), 0);
+
+      const prevTimes = Array.isArray(next.set_times) ? next.set_times : [[]];
+      next.set_times = resizeSetTimes(prevTimes, setsN, repsN);
+
+      const maxSetIndex = Math.max(0, setsN - 1);
+      next.activeSet = Math.min(next.activeSet ?? 0, maxSetIndex);
+
+      copy[index] = next;
+      return copy;
+    });
+  }
+
+  // LIFT: sets resize lift arrays (string[])
+  function updateLiftSets(index: number, setsValue: string) {
+    setEntries((prev) => {
+      const copy = [...prev];
+      const cur = copy[index];
+      const next = { ...cur, sets: setsValue };
+
+      const setsN = Math.max(toPosInt(setsValue), 1);
+      next.lift_reps = resizeFlat(next.lift_reps ?? [""], setsN);
+      next.lift_weights = resizeFlat(next.lift_weights ?? [""], setsN);
+
+      copy[index] = next;
+      return copy;
+    });
+  }
+
+  function updateLiftArray(
+    index: number,
+    key: "lift_reps" | "lift_weights",
+    setIdx: number,
+    value: string
+  ) {
+    setEntries((prev) => {
+      const copy = [...prev];
+      const cur = copy[index];
+      const arr = [...(cur[key] ?? [])];
+      arr[setIdx] = value;
+      copy[index] = { ...cur, [key]: arr };
+      return copy;
     });
   }
 
@@ -119,26 +268,72 @@ const [date] = useState(() =>
       setStatus(null);
 
       const trimmedTitle = title.trim() || "Workout";
-      const cleanedEntries = entries.map((e) => e.trim()).filter(Boolean);
 
+      // 1) Insert workout FIRST
       const { data: workout, error: wErr } = await supabase
         .from("workouts")
-        .insert({ workout_date: date, title: trimmedTitle, notes, workout_type: workoutType })
-        .select()
+        .insert({
+          workout_date: date,
+          title: trimmedTitle,
+          notes,
+          workout_type: workoutType,
+        })
+        .select("id")
         .single();
 
       if (wErr) throw wErr;
+      if (!workout?.id) throw new Error("Workout insert failed (no id returned).");
+
+      // 2) Clean entries SECOND (different payload by mode)
+      const cleanedEntries = entries
+        .map((e) => {
+          const setsN = Math.max(toPosInt(e.sets), 1);
+
+          if (workoutType === "lift") {
+            const repsArr = (e.lift_reps ?? []).slice(0, setsN).map((x) => x.trim());
+            const wArr = (e.lift_weights ?? []).slice(0, setsN).map((x) => x.trim());
+
+            // convert blanks -> null so you can be "flexible"
+            const lift_reps = repsArr.map((x) => (x ? parseInt(x, 10) : null));
+            const lift_weights = wArr.map((x) => (x ? Number(x) : null));
+
+            return {
+              exercise: e.exercise.trim() || null,
+              sets: setsN,
+              lift_reps,
+              lift_weights,
+              notes: e.notes.trim() || null,
+            };
+          } else {
+            const repsN = toPosInt(e.reps);
+            const prevTimes = Array.isArray(e.set_times) ? e.set_times : [[]];
+            const set_times = e.timesApplicable
+              ? resizeSetTimes(prevTimes, setsN, repsN).map((row) => row.map((t) => t.trim()))
+              : null;
+
+            return {
+              exercise: e.exercise.trim() || null,
+              sets: setsN,
+              reps: repsN || null,
+              set_times,
+              weight: e.weight.trim() ? Number(e.weight) : null,
+              notes: e.notes.trim() || null,
+            };
+          }
+        })
+        // require at least an exercise name to save an entry
+        .filter((row) => row.exercise);
 
       if (cleanedEntries.length) {
-        const payload = cleanedEntries.map((label) => ({
+        const payload = cleanedEntries.map((e) => ({
           workout_id: workout.id,
-          label,
+          ...e,
         }));
+
         const { error: eErr } = await supabase.from("workout_entries").insert(payload);
         if (eErr) throw eErr;
       }
 
-      // Sleek toast
       showToast("Workout saved ✅");
     } catch (e: any) {
       setStatus(`Error: ${e?.message ?? String(e)}`);
@@ -163,7 +358,12 @@ const [date] = useState(() =>
             <Text style={{ fontWeight: "600" }}>Cancel</Text>
           </Pressable>
         </View>
-        <Text style={{ fontSize: 22, fontWeight: "800" }}>Log Workout</Text>
+
+        <Text style={{ fontSize: 22, fontWeight: "800" }}>
+          {isLift ? "Log Lift" : "Log Track"}
+        </Text>
+
+        {/* Track/Lift toggle */}
         <View style={{ flexDirection: "row", gap: 10 }}>
           <Pressable
             onPress={() => setWorkoutType("track")}
@@ -204,8 +404,9 @@ const [date] = useState(() =>
         <TextInput
           value={title}
           onChangeText={setTitle}
-          placeholder="Workout title"
-          style={{ borderWidth: 1, borderRadius: 12, padding: 12 }}
+          placeholder="Workout Title"
+          placeholderTextColor={placeholderColor}
+          style={inputStyle}
         />
 
         <TextInput
@@ -213,26 +414,228 @@ const [date] = useState(() =>
           onChangeText={setNotes}
           placeholder="Notes (optional)"
           multiline
-          style={{ borderWidth: 1, borderRadius: 12, padding: 12, minHeight: 80 }}
+          placeholderTextColor={placeholderColor}
+          style={[inputStyle, { minHeight: 80 }]}
         />
 
         <Text style={{ fontWeight: "700" }}>Entries</Text>
 
         {entries.map((entry, index) => (
-          <View key={index} style={{ gap: 6 }}>
+          <View
+            key={index}
+            style={{ borderWidth: 1, borderRadius: 14, padding: 12, gap: 10 }}
+          >
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Text style={{ fontWeight: "800" }}>Entry {index + 1}</Text>
+              <Pressable onPress={() => removeEntry(index)}>
+                <Text style={{ color: "red", fontWeight: "700" }}>Remove</Text>
+              </Pressable>
+            </View>
+
+            {/* Exercise */}
             <TextInput
-              value={entry}
-              onChangeText={(value) => updateEntry(index, value)}
-              placeholder={`Entry ${index + 1}`}
-              style={{ borderWidth: 1, borderRadius: 12, padding: 12 }}
+              value={entry.exercise}
+              onChangeText={(v) => updateEntryField(index, { exercise: v })}
+              placeholder={isLift ? "Exercise (e.g., Bench Press)" : "Exercise (e.g., 4x30m blocks)"}
+              placeholderTextColor={placeholderColor}
+              style={inputStyle}
             />
-            <Pressable onPress={() => removeEntry(index)}>
-              <Text style={{ color: "red" }}>Remove</Text>
-            </Pressable>
+
+            {/* Sets (shared, but drives different UI by mode) */}
+            <TextInput
+              value={entry.sets}
+              onChangeText={(v) => {
+                if (isLift) updateLiftSets(index, v);
+                else updateTrackSetsOrReps(index, "sets", v);
+              }}
+              placeholder="Sets"
+              keyboardType="numeric"
+              placeholderTextColor={placeholderColor}
+              style={inputStyle}
+            />
+
+            {isLift ? (
+              // ---------------- LIFT MODE ----------------
+              <View style={{ gap: 10 }}>
+                <Text style={{ fontWeight: "800" }}>Per-set log</Text>
+
+                {/* Row 1: Reps per set */}
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {(entry.lift_reps ?? []).map((val, sIdx) => (
+                    <TextInput
+                      key={`r-${sIdx}`}
+                      value={val}
+                      onChangeText={(v) => updateLiftArray(index, "lift_reps", sIdx, v)}
+                      placeholder={`Reps`}
+                      keyboardType="numeric"
+                      placeholderTextColor={placeholderColor}
+                      style={[inputStyle, { flex: 1, textAlign: "center" }]}
+                    />
+                  ))}
+                </View>
+
+                {/* Row 2: Weight per set */}
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {(entry.lift_weights ?? []).map((val, sIdx) => (
+                    <TextInput
+                      key={`w-${sIdx}`}
+                      value={val}
+                      onChangeText={(v) => updateLiftArray(index, "lift_weights", sIdx, v)}
+                      placeholder={`Weight`}
+                      keyboardType="numeric"
+                      placeholderTextColor={placeholderColor}
+                      style={[inputStyle, { flex: 1, textAlign: "center" }]}
+                    />
+                  ))}
+                </View>
+
+                <TextInput
+                  value={entry.notes}
+                  onChangeText={(v) => updateEntryField(index, { notes: v })}
+                  placeholder="Entry notes (optional)"
+                  placeholderTextColor={placeholderColor}
+                  style={inputStyle}
+                />
+              </View>
+            ) : (
+              // ---------------- TRACK MODE ----------------
+              <View style={{ gap: 10 }}>
+                {/* Reps drives time boxes */}
+                <TextInput
+                  value={entry.reps}
+                  onChangeText={(v) => updateTrackSetsOrReps(index, "reps", v)}
+                  placeholder="Reps"
+                  keyboardType="numeric"
+                  placeholderTextColor={placeholderColor}
+                  style={inputStyle}
+                />
+
+<View style={{ flexDirection: "row", gap: 10 }}>
+  <Pressable
+    onPress={() => {
+      // turn ON times + rebuild grid
+      const setsN = Math.max(toPosInt(entry.sets), 1);
+      const repsN = Math.max(toPosInt(entry.reps), 0);
+      const prevTimes = Array.isArray(entry.set_times) ? entry.set_times : [[]];
+      const rebuilt = resizeSetTimes(prevTimes, setsN, repsN);
+
+      updateEntryField(index, {
+        timesApplicable: true,
+        set_times: rebuilt,
+      });
+    }}
+    style={{
+      flex: 1,
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingVertical: 8,
+      alignItems: "center",
+      backgroundColor: entry.timesApplicable ? "black" : "transparent",
+    }}
+  >
+    <Text style={{ fontWeight: "700", color: entry.timesApplicable ? "white" : "black" }}>
+      Times Applicable
+    </Text>
+  </Pressable>
+
+  <Pressable
+    onPress={() => {
+      // turn OFF times + clear times so nothing saves
+      updateEntryField(index, {
+        timesApplicable: false,
+        set_times: [[]],
+      });
+    }}
+    style={{
+      flex: 1,
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingVertical: 8,
+      alignItems: "center",
+      backgroundColor: !entry.timesApplicable ? "black" : "transparent",
+    }}
+  >
+    <Text style={{ fontWeight: "700", color: !entry.timesApplicable ? "white" : "black" }}>
+      Times Not Applicable
+    </Text>
+  </Pressable>
+</View>
+
+{entry.timesApplicable && (
+  <>
+    {/* Set tabs */}
+    <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+      {Array.from({ length: Math.max(toPosInt(entry.sets), 1) }, (_, sIdx) => (
+        <Pressable
+          key={sIdx}
+          onPress={() => updateEntryField(index, { activeSet: sIdx })}
+          style={{
+            borderWidth: 1,
+            borderRadius: 999,
+            paddingVertical: 6,
+            paddingHorizontal: 10,
+            backgroundColor: entry.activeSet === sIdx ? "black" : "transparent",
+          }}
+        >
+          <Text
+            style={{
+              color: entry.activeSet === sIdx ? "white" : "black",
+              fontWeight: "700",
+            }}
+          >
+            Set {sIdx + 1}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+
+    {/* Times for active set */}
+    <View style={{ gap: 8 }}>
+      <Text style={{ fontWeight: "700" }}>
+        Times — Set {entry.activeSet + 1}
+      </Text>
+
+      {(entry.set_times?.[entry.activeSet] ?? []).map((t, repIdx) => (
+        <TextInput
+          key={repIdx}
+          value={t}
+          onChangeText={(v) => {
+            const next = entry.set_times.map((row) => [...row]);
+            next[entry.activeSet][repIdx] = v;
+            updateEntryField(index, { set_times: next });
+          }}
+          placeholder={`Rep ${repIdx + 1} time`}
+          placeholderTextColor={placeholderColor}
+          style={inputStyle}
+        />
+      ))}
+    </View>
+  </>
+)}
+
+                {/* Optional single weight for track (sled/medball/etc.) */}
+                <TextInput
+                  value={entry.weight}
+                  onChangeText={(v) => updateEntryField(index, { weight: v })}
+                  placeholder="Weight (optional)"
+                  keyboardType="numeric"
+                  placeholderTextColor={placeholderColor}
+                  style={inputStyle}
+                />
+
+                <TextInput
+                  value={entry.notes}
+                  onChangeText={(v) => updateEntryField(index, { notes: v })}
+                  placeholder="Entry notes (optional)"
+                  placeholderTextColor={placeholderColor}
+                  style={inputStyle}
+                />
+              </View>
+            )}
           </View>
         ))}
 
-        <PrimaryButton title="Add another entry" onPress={addEntry} />
+        <PrimaryButton title={isLift ? "Add another lift" : "Add another rep/drill"} onPress={addEntry} />
 
         <Pressable
           onPress={saveWorkout}
@@ -270,7 +673,12 @@ const [date] = useState(() =>
             paddingHorizontal: 16,
           }}
         >
-          <Pressable onPress={() => { hideToast(); router.replace("/(tabs)/log"); }}>
+          <Pressable
+            onPress={() => {
+              hideToast();
+              router.replace("/(tabs)/log");
+            }}
+          >
             <Animated.View
               style={{
                 transform: [{ translateY }],
