@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, Pressable, RefreshControl } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import PrimaryButton from "../../components/PrimaryButton";
 import { supabase } from "../../lib/supabase";
 import { formatYMD } from "../../lib/date";
+import FormScreen from "../../components/FormScreen";
 
 type Workout = {
   id: string;
@@ -38,7 +39,6 @@ export default function WorkoutsScreen() {
     setStatus((data?.length ?? 0) ? "Loaded ✅" : "No workouts yet");
   }, []);
 
-  // Auto-refresh whenever you land back on this tab (e.g., after saving from modal)
   useFocusEffect(
     useCallback(() => {
       load();
@@ -54,9 +54,11 @@ export default function WorkoutsScreen() {
   const todaysWorkout = items.find((w) => w.workout_date === todayKey);
 
   return (
-    <ScrollView
-      contentContainerStyle={{ padding: 16, gap: 14 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    <FormScreen
+      refreshControlProps={{
+        refreshing,
+        onRefresh,
+      }}
     >
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Text style={{ fontSize: 22, fontWeight: "800" }}>Workouts</Text>
@@ -100,6 +102,6 @@ export default function WorkoutsScreen() {
           {!!w.notes && <Text numberOfLines={2}>{w.notes}</Text>}
         </Pressable>
       ))}
-    </ScrollView>
+    </FormScreen>
   );
 }

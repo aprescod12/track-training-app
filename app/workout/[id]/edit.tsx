@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { View, Text, TextInput, ScrollView, Pressable, ActivityIndicator } from "react-native";
-import { Stack, useLocalSearchParams, router } from "expo-router";
+import { View, Text, TextInput, Pressable, ActivityIndicator, Alert } from "react-native";
+import { useLocalSearchParams, router } from "expo-router";
 import PrimaryButton from "../../../components/PrimaryButton";
+import FormScreen from "../../../components/FormScreen";
 import { supabase } from "../../../lib/supabase";
+import { useNavigation } from "@react-navigation/native";
 
 type WorkoutRow = {
   id: string;
@@ -25,14 +27,16 @@ type EntryRow = {
 };
 
 type EntryDraft = {
-  exercise: string;
+  id?: string;  // DB id (existing rows)
+  key: string;  // stable key for React list
 
+  exercise: string;
   sets: string;
 
   // track
   reps: string;
   timesApplicable: boolean;
-  set_times: string[][]; // if timesApplicable=false, we still keep something local, but save null
+  set_times: string[][];
 
   // lift
   lift_reps: string[];
@@ -75,22 +79,63 @@ function resizeSetTimes(prev: string[][], setsN: number, repsN: number) {
   return next;
 }
 
+function makeBlankEntry(): EntryDraft {
+  return {
+    key: `new-${Date.now()}-${Math.random()}`,
+    id: undefined,
+    exercise: "",
+    sets: "1",
+    reps: "",
+    timesApplicable: true,
+    set_times: [[]],
+    lift_reps: [""],
+    lift_weights: [""],
+    weight: "",
+    notes: "",
+  };
+}
+
 export default function EditWorkout() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const navigation = useNavigation();
 
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
-
   const [workoutType, setWorkoutType] = useState<"track" | "lift">("track");
   const isLift = workoutType === "lift";
 
   const [entries, setEntries] = useState<EntryDraft[]>([]);
+  const [deletedEntryIds, setDeletedEntryIds] = useState<string[]>([]);
+
   const [status, setStatus] = useState("Loading...");
   const [saving, setSaving] = useState(false);
 
+  // unsaved changes guard
+  const [initialSnapshot, setInitialSnapshot] = useState<string>("");
+
+  const isDirty = useMemo(() => {
+    if (!initialSnapshot) return false;
+    const now = JSON.stringify({ title, notes, workoutType, entries, deletedEntryIds });
+    return now !== initialSnapshot;
+  }, [title, notes, workoutType, entries, deletedEntryIds, initialSnapshot]);
+
+  useEffect(() => {
+    const sub = navigation.addListener("beforeRemove", (e: any) => {
+      if (!isDirty || saving) return;
+
+      e.preventDefault();
+
+      Alert.alert("Discard changes?", "You have unsaved changes.", [
+        { text: "Keep editing", style: "cancel" },
+        { text: "Discard", style: "destructive", onPress: () => navigation.dispatch(e.data.action) },
+      ]);
+    });
+
+    return sub as any;
+  }, [navigation, isDirty, saving]);
+
   async function load() {
     if (!id) return;
-
     setStatus("Loading...");
 
     const { data, error } = await supabase
@@ -128,52 +173,52 @@ export default function EditWorkout() {
     setNotes(row.notes ?? "");
     setWorkoutType(row.workout_type);
 
-    const drafts: EntryDraft[] =
-      (row.workout_entries ?? []).map((e) => {
-        const setsN = e.sets ?? 1;
+    const drafts: EntryDraft[] = (row.workout_entries ?? []).map((e) => {
+      const setsN = e.sets ?? 1;
 
-        // Track
-        const repsN = e.reps ?? 0;
-        const timesApplicable = e.set_times !== null; // if null => N/A
-        const localTimes = Array.isArray(e.set_times)
-          ? e.set_times
-          : resizeSetTimes([[]], setsN, repsN);
+      // track
+      const repsN = e.reps ?? 0;
+      const timesApplicable = e.set_times !== null;
+      const localTimes = Array.isArray(e.set_times)
+        ? e.set_times
+        : resizeSetTimes([[]], setsN, repsN);
 
-        // Lift arrays (convert to strings)
-        const liftRepsStr = (e.lift_reps ?? []).map((x) => (x === null || x === undefined ? "" : String(x)));
-        const liftWeightsStr = (e.lift_weights ?? []).map((x) => (x === null || x === undefined ? "" : String(x)));
+      // lift arrays -> strings
+      const liftRepsStr = (e.lift_reps ?? []).map((x) => (x == null ? "" : String(x)));
+      const liftWeightsStr = (e.lift_weights ?? []).map((x) => (x == null ? "" : String(x)));
 
-        return {
-          exercise: e.exercise ?? "",
-          sets: String(setsN),
+      return {
+        id: e.id,
+        key: e.id, // ✅ stable list key
+        exercise: e.exercise ?? "",
+        sets: String(setsN),
 
-          reps: String(repsN || ""),
-          timesApplicable,
-          set_times: localTimes,
+        reps: repsN ? String(repsN) : "",
+        timesApplicable,
+        set_times: localTimes,
 
-          lift_reps: liftRepsStr.length ? liftRepsStr : [""],
-          lift_weights: liftWeightsStr.length ? liftWeightsStr : [""],
+        lift_reps: liftRepsStr.length ? liftRepsStr : [""],
+        lift_weights: liftWeightsStr.length ? liftWeightsStr : [""],
 
-          weight: e.weight === null || e.weight === undefined ? "" : String(e.weight),
-          notes: e.notes ?? "",
-        };
-      }) ?? [];
+        weight: e.weight == null ? "" : String(e.weight),
+        notes: e.notes ?? "",
+      };
+    });
 
-    setEntries(drafts.length ? drafts : [
-      {
-        exercise: "",
-        sets: "1",
-        reps: "",
-        timesApplicable: true,
-        set_times: [[]],
-        lift_reps: [""],
-        lift_weights: [""],
-        weight: "",
-        notes: "",
-      },
-    ]);
+    const finalEntries = drafts.length ? drafts : [makeBlankEntry()];
+    setEntries(finalEntries);
+    setDeletedEntryIds([]);
 
     setStatus("Ready ✅");
+
+    const snap = JSON.stringify({
+      title: row.title ?? "",
+      notes: row.notes ?? "",
+      workoutType: row.workout_type,
+      entries: finalEntries,
+      deletedEntryIds: [],
+    });
+    setInitialSnapshot(snap);
   }
 
   useEffect(() => {
@@ -181,38 +226,17 @@ export default function EditWorkout() {
   }, [id]);
 
   function addEntry() {
-    setEntries((prev) => [
-      ...prev,
-      {
-        exercise: "",
-        sets: "1",
-        reps: "",
-        timesApplicable: true,
-        set_times: [[]],
-        lift_reps: [""],
-        lift_weights: [""],
-        weight: "",
-        notes: "",
-      },
-    ]);
+    setEntries((prev) => [...prev, makeBlankEntry()]);
   }
 
   function removeEntry(index: number) {
     setEntries((prev) => {
+      const target = prev[index];
+      if (target?.id) {
+        setDeletedEntryIds((ids) => [...ids, target.id!]);
+      }
       const next = prev.filter((_, i) => i !== index);
-      return next.length ? next : [
-        {
-          exercise: "",
-          sets: "1",
-          reps: "",
-          timesApplicable: true,
-          set_times: [[]],
-          lift_reps: [""],
-          lift_weights: [""],
-          weight: "",
-          notes: "",
-        },
-      ];
+      return next.length ? next : [makeBlankEntry()];
     });
   }
 
@@ -224,35 +248,84 @@ export default function EditWorkout() {
     });
   }
 
-  function updateTrackSetsOrReps(index: number, key: "sets" | "reps", value: string) {
+  // --------- Track set/rep controls ----------
+  function addTrackSet(index: number) {
     setEntries((prev) => {
       const copy = [...prev];
       const cur = copy[index];
-      const next = { ...cur, [key]: value };
-
-      const setsN = Math.max(toPosInt(next.sets), 1);
-      const repsN = Math.max(toPosInt(next.reps), 0);
-
-      // if times applicable, maintain shape; if not, keep local times minimal
-      const prevTimes = Array.isArray(next.set_times) ? next.set_times : [[]];
-      next.set_times = resizeSetTimes(prevTimes, setsN, repsN);
-
-      copy[index] = next;
+      const setsN = Math.max(toPosInt(cur.sets), 1) + 1;
+      const repsN = Math.max(toPosInt(cur.reps), 0);
+      const nextTimes = resizeSetTimes(cur.set_times ?? [[]], setsN, repsN);
+      copy[index] = { ...cur, sets: String(setsN), set_times: nextTimes };
       return copy;
     });
   }
 
-  function updateLiftSets(index: number, value: string) {
+  function removeTrackSet(index: number) {
     setEntries((prev) => {
       const copy = [...prev];
       const cur = copy[index];
-      const setsN = Math.max(toPosInt(value), 1);
+      const setsN = Math.max(toPosInt(cur.sets), 1);
+      const nextSets = Math.max(1, setsN - 1);
+      const repsN = Math.max(toPosInt(cur.reps), 0);
+      const nextTimes = resizeSetTimes(cur.set_times ?? [[]], nextSets, repsN);
+      copy[index] = { ...cur, sets: String(nextSets), set_times: nextTimes };
+      return copy;
+    });
+  }
 
+  function addTrackRep(index: number) {
+    setEntries((prev) => {
+      const copy = [...prev];
+      const cur = copy[index];
+      const repsN = Math.max(toPosInt(cur.reps), 0) + 1;
+      const setsN = Math.max(toPosInt(cur.sets), 1);
+      const nextTimes = resizeSetTimes(cur.set_times ?? [[]], setsN, repsN);
+      copy[index] = { ...cur, reps: String(repsN), set_times: nextTimes };
+      return copy;
+    });
+  }
+
+  function removeTrackRep(index: number) {
+    setEntries((prev) => {
+      const copy = [...prev];
+      const cur = copy[index];
+      const repsN = Math.max(toPosInt(cur.reps), 0);
+      const nextReps = Math.max(0, repsN - 1);
+      const setsN = Math.max(toPosInt(cur.sets), 1);
+      const nextTimes = resizeSetTimes(cur.set_times ?? [[]], setsN, nextReps);
+      copy[index] = { ...cur, reps: nextReps ? String(nextReps) : "", set_times: nextTimes };
+      return copy;
+    });
+  }
+
+  // --------- Lift set controls ----------
+  function addLiftSet(index: number) {
+    setEntries((prev) => {
+      const copy = [...prev];
+      const cur = copy[index];
+      const setsN = Math.max(toPosInt(cur.sets), 1) + 1;
       copy[index] = {
         ...cur,
-        sets: value,
+        sets: String(setsN),
         lift_reps: resizeFlat(cur.lift_reps ?? [""], setsN),
         lift_weights: resizeFlat(cur.lift_weights ?? [""], setsN),
+      };
+      return copy;
+    });
+  }
+
+  function removeLiftSet(index: number) {
+    setEntries((prev) => {
+      const copy = [...prev];
+      const cur = copy[index];
+      const setsN = Math.max(toPosInt(cur.sets), 1);
+      const nextSets = Math.max(1, setsN - 1);
+      copy[index] = {
+        ...cur,
+        sets: String(nextSets),
+        lift_reps: resizeFlat(cur.lift_reps ?? [""], nextSets),
+        lift_weights: resizeFlat(cur.lift_weights ?? [""], nextSets),
       };
       return copy;
     });
@@ -286,63 +359,96 @@ export default function EditWorkout() {
 
       if (wErr) throw wErr;
 
-      // 2) Replace entries (MVP approach)
-      const { error: delErr } = await supabase
-        .from("workout_entries")
-        .delete()
-        .eq("workout_id", id);
+      // 2) Build update/insert payloads
+      const updates: any[] = [];
+      const inserts: any[] = [];
 
-      if (delErr) throw delErr;
+      for (const e of entries) {
+        const exercise = e.exercise.trim();
+        if (!exercise) continue;
 
-      // 3) Build payload
-      const cleanedEntries = entries
-        .map((e) => {
-          const setsN = Math.max(toPosInt(e.sets), 1);
-          const exercise = e.exercise.trim();
-          if (!exercise) return null;
+        const setsN = Math.max(toPosInt(e.sets), 1);
 
-          if (workoutType === "lift") {
-            const repsArr = (e.lift_reps ?? []).slice(0, setsN).map((x) => x.trim());
-            const wArr = (e.lift_weights ?? []).slice(0, setsN).map((x) => x.trim());
+        if (workoutType === "lift") {
+          const repsArr = (e.lift_reps ?? []).slice(0, setsN).map((x) => x.trim());
+          const wArr = (e.lift_weights ?? []).slice(0, setsN).map((x) => x.trim());
 
-            const lift_reps = repsArr.map((x) => (x ? parseInt(x, 10) : null));
-            const lift_weights = wArr.map((x) => (x ? Number(x) : null));
+          const lift_reps = repsArr.map((x) => (x ? parseInt(x, 10) : null));
+          const lift_weights = wArr.map((x) => (x ? Number(x) : null));
 
-            return {
-              workout_id: id,
-              exercise,
-              sets: setsN,
-              lift_reps,
-              lift_weights,
-              notes: e.notes.trim() || null,
-            };
-          } else {
-            const repsN = toPosInt(e.reps);
-            const prevTimes = Array.isArray(e.set_times) ? e.set_times : [[]];
+          const row = {
+            workout_id: id,
+            exercise,
+            sets: setsN,
+            lift_reps,
+            lift_weights,
+            notes: e.notes.trim() || null,
+          };
 
-            const set_times = e.timesApplicable
-              ? resizeSetTimes(prevTimes, setsN, repsN).map((row) => row.map((t) => t.trim()))
-              : null;
+          if (e.id) updates.push({ id: e.id, ...row });
+          else inserts.push(row);
+        } else {
+          const repsN = toPosInt(e.reps);
+          const prevTimes = Array.isArray(e.set_times) ? e.set_times : [[]];
 
-            return {
-              workout_id: id,
-              exercise,
-              sets: setsN,
-              reps: repsN || null,
-              set_times,
-              weight: e.weight.trim() ? Number(e.weight) : null,
-              notes: e.notes.trim() || null,
-            };
-          }
-        })
-        .filter(Boolean) as any[];
+          const set_times = e.timesApplicable
+            ? resizeSetTimes(prevTimes, setsN, Math.max(repsN, 0)).map((row) => row.map((t) => t.trim()))
+            : null;
 
-      if (cleanedEntries.length) {
-        const { error: insErr } = await supabase.from("workout_entries").insert(cleanedEntries);
+          const row = {
+            workout_id: id,
+            exercise,
+            sets: setsN,
+            reps: repsN || null,
+            set_times,
+            weight: e.weight.trim() ? Number(e.weight) : null,
+            notes: e.notes.trim() || null,
+          };
+
+          if (e.id) updates.push({ id: e.id, ...row });
+          else inserts.push(row);
+        }
+      }
+
+      // 3) Delete only removed entries
+      if (deletedEntryIds.length) {
+        const { error: delErr } = await supabase
+          .from("workout_entries")
+          .delete()
+          .in("id", deletedEntryIds);
+
+        if (delErr) throw delErr;
+      }
+
+      // 4) Update existing rows
+      for (const u of updates) {
+        const { id: entryId, ...patch } = u;
+        const { error } = await supabase
+          .from("workout_entries")
+          .update(patch)
+          .eq("id", entryId);
+
+        if (error) throw error;
+      }
+
+      // 5) Insert new rows
+      if (inserts.length) {
+        const { error: insErr } = await supabase.from("workout_entries").insert(inserts);
         if (insErr) throw insErr;
       }
 
       setStatus("Saved ✅");
+      setDeletedEntryIds([]);
+
+      const snap = JSON.stringify({
+        title: trimmedTitle,
+        notes,
+        workoutType,
+        entries,
+        deletedEntryIds: [],
+      });
+      setInitialSnapshot(snap);
+
       router.back();
     } catch (e: any) {
       setStatus("Error: " + (e?.message ?? String(e)));
@@ -353,9 +459,7 @@ export default function EditWorkout() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Edit Workout" }} />
-
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+      <FormScreen>
         <Text style={{ opacity: 0.7 }}>{status}</Text>
 
         <Text style={{ fontWeight: "800" }}>Title</Text>
@@ -380,7 +484,7 @@ export default function EditWorkout() {
         <Text style={{ fontWeight: "800" }}>Entries</Text>
 
         {entries.map((entry, index) => (
-          <View key={index} style={{ borderWidth: 1, borderRadius: 14, padding: 12, gap: 10 }}>
+          <View key={entry.key} style={{ borderWidth: 1, borderRadius: 14, padding: 12, gap: 10 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <Text style={{ fontWeight: "800" }}>Entry {index + 1}</Text>
               <Pressable onPress={() => removeEntry(index)}>
@@ -396,17 +500,22 @@ export default function EditWorkout() {
               style={inputStyle}
             />
 
-            <TextInput
-              value={entry.sets}
-              onChangeText={(v) => {
-                if (isLift) updateLiftSets(index, v);
-                else updateTrackSetsOrReps(index, "sets", v);
-              }}
-              placeholder="Sets"
-              keyboardType="numeric"
-              placeholderTextColor={placeholderColor}
-              style={inputStyle}
-            />
+            {/* Sets + quick buttons */}
+            <View style={{ gap: 8 }}>
+              <TextInput
+                value={entry.sets}
+                onChangeText={(v) => patchEntry(index, { sets: v })}
+                placeholder="Sets"
+                keyboardType="numeric"
+                placeholderTextColor={placeholderColor}
+                style={inputStyle}
+              />
+
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <PrimaryButton title="+ Set" onPress={() => (isLift ? addLiftSet(index) : addTrackSet(index))} />
+                <PrimaryButton title="- Set" onPress={() => (isLift ? removeLiftSet(index) : removeTrackSet(index))} />
+              </View>
+            </View>
 
             {isLift ? (
               <View style={{ gap: 10 }}>
@@ -444,12 +553,17 @@ export default function EditWorkout() {
               <View style={{ gap: 10 }}>
                 <TextInput
                   value={entry.reps}
-                  onChangeText={(v) => updateTrackSetsOrReps(index, "reps", v)}
+                  onChangeText={(v) => patchEntry(index, { reps: v })}
                   placeholder="Reps"
                   keyboardType="numeric"
                   placeholderTextColor={placeholderColor}
                   style={inputStyle}
                 />
+
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <PrimaryButton title="+ Rep" onPress={() => addTrackRep(index)} />
+                  <PrimaryButton title="- Rep" onPress={() => removeTrackRep(index)} />
+                </View>
 
                 {/* times toggle */}
                 <View style={{ flexDirection: "row", gap: 10 }}>
@@ -459,7 +573,6 @@ export default function EditWorkout() {
                       const repsN = Math.max(toPosInt(entry.reps), 0);
                       const prevTimes = Array.isArray(entry.set_times) ? entry.set_times : [[]];
                       const rebuilt = resizeSetTimes(prevTimes, setsN, repsN);
-
                       patchEntry(index, { timesApplicable: true, set_times: rebuilt });
                     }}
                     style={{
@@ -493,13 +606,14 @@ export default function EditWorkout() {
                   </Pressable>
                 </View>
 
-                {/* show set_times only if applicable */}
                 {entry.timesApplicable && (
                   <View style={{ gap: 8 }}>
                     <Text style={{ fontWeight: "800" }}>Times</Text>
+
                     {entry.set_times.map((row, sIdx) => (
                       <View key={sIdx} style={{ gap: 6 }}>
                         <Text style={{ fontWeight: "700" }}>Set {sIdx + 1}</Text>
+
                         {row.map((t, repIdx) => (
                           <TextInput
                             key={repIdx}
@@ -563,8 +677,18 @@ export default function EditWorkout() {
           )}
         </Pressable>
 
-        <PrimaryButton title="Cancel" onPress={() => router.back()} />
-      </ScrollView>
+        <PrimaryButton
+          title="Cancel"
+          onPress={() => {
+            if (!isDirty) return router.back();
+
+            Alert.alert("Discard changes?", "You have unsaved changes.", [
+              { text: "Keep editing", style: "cancel" },
+              { text: "Discard", style: "destructive", onPress: () => router.back() },
+            ]);
+          }}
+        />
+      </FormScreen>
     </>
   );
 }

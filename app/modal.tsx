@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TextInput,
-  ScrollView,
   Pressable,
   ActivityIndicator,
   Animated,
@@ -11,6 +10,7 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import PrimaryButton from "../components/PrimaryButton";
+import FormScreen from "../components/FormScreen";
 import { supabase } from "../lib/supabase";
 import { formatYMD } from "../lib/date";
 
@@ -60,7 +60,6 @@ function resizeFlat(arr: string[], n: number) {
 
 function resizeSetTimes(prev: string[][], setsN: number, repsN: number) {
   const next: string[][] = [];
-
   for (let s = 0; s < setsN; s++) {
     const existingRow = prev[s] ?? [];
     const row = existingRow.slice(0, repsN);
@@ -111,7 +110,6 @@ export default function ModalScreen() {
 
   const showToast = (message: string) => {
     setToast({ open: true, message });
-
     translateY.setValue(30);
     opacity.setValue(0);
 
@@ -148,19 +146,15 @@ export default function ModalScreen() {
     ]).start(() => setToast((t) => ({ ...t, open: false })));
   };
 
-  // Auto-dismiss + navigate back to Workouts tab
   useEffect(() => {
     if (!toast.open) return;
-
     const t = setTimeout(() => {
       hideToast();
       router.replace("/(tabs)/log");
     }, 900);
-
     return () => clearTimeout(t);
   }, [toast.open]);
 
-  // ---- Entry helpers ----
   function addEntry() {
     setEntries((prev) => [
       ...prev,
@@ -209,7 +203,6 @@ export default function ModalScreen() {
     });
   }
 
-  // TRACK: sets/reps resize set_times (string[][])
   function updateTrackSetsOrReps(index: number, key: "sets" | "reps", value: string) {
     setEntries((prev) => {
       const copy = [...prev];
@@ -230,7 +223,6 @@ export default function ModalScreen() {
     });
   }
 
-  // LIFT: sets resize lift arrays (string[])
   function updateLiftSets(index: number, setsValue: string) {
     setEntries((prev) => {
       const copy = [...prev];
@@ -269,7 +261,6 @@ export default function ModalScreen() {
 
       const trimmedTitle = title.trim() || "Workout";
 
-      // 1) Insert workout FIRST
       const { data: workout, error: wErr } = await supabase
         .from("workouts")
         .insert({
@@ -284,7 +275,6 @@ export default function ModalScreen() {
       if (wErr) throw wErr;
       if (!workout?.id) throw new Error("Workout insert failed (no id returned).");
 
-      // 2) Clean entries SECOND (different payload by mode)
       const cleanedEntries = entries
         .map((e) => {
           const setsN = Math.max(toPosInt(e.sets), 1);
@@ -293,7 +283,6 @@ export default function ModalScreen() {
             const repsArr = (e.lift_reps ?? []).slice(0, setsN).map((x) => x.trim());
             const wArr = (e.lift_weights ?? []).slice(0, setsN).map((x) => x.trim());
 
-            // convert blanks -> null so you can be "flexible"
             const lift_reps = repsArr.map((x) => (x ? parseInt(x, 10) : null));
             const lift_weights = wArr.map((x) => (x ? Number(x) : null));
 
@@ -321,7 +310,6 @@ export default function ModalScreen() {
             };
           }
         })
-        // require at least an exercise name to save an entry
         .filter((row) => row.exercise);
 
       if (cleanedEntries.length) {
@@ -344,7 +332,7 @@ export default function ModalScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
+      <FormScreen>
         <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
           <Pressable
             onPress={() => router.back()}
@@ -363,7 +351,6 @@ export default function ModalScreen() {
           {isLift ? "Log Lift" : "Log Track"}
         </Text>
 
-        {/* Track/Lift toggle */}
         <View style={{ flexDirection: "row", gap: 10 }}>
           <Pressable
             onPress={() => setWorkoutType("track")}
@@ -432,7 +419,6 @@ export default function ModalScreen() {
               </Pressable>
             </View>
 
-            {/* Exercise */}
             <TextInput
               value={entry.exercise}
               onChangeText={(v) => updateEntryField(index, { exercise: v })}
@@ -441,7 +427,6 @@ export default function ModalScreen() {
               style={inputStyle}
             />
 
-            {/* Sets (shared, but drives different UI by mode) */}
             <TextInput
               value={entry.sets}
               onChangeText={(v) => {
@@ -455,18 +440,16 @@ export default function ModalScreen() {
             />
 
             {isLift ? (
-              // ---------------- LIFT MODE ----------------
               <View style={{ gap: 10 }}>
                 <Text style={{ fontWeight: "800" }}>Per-set log</Text>
 
-                {/* Row 1: Reps per set */}
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   {(entry.lift_reps ?? []).map((val, sIdx) => (
                     <TextInput
                       key={`r-${sIdx}`}
                       value={val}
                       onChangeText={(v) => updateLiftArray(index, "lift_reps", sIdx, v)}
-                      placeholder={`Reps`}
+                      placeholder="Reps"
                       keyboardType="numeric"
                       placeholderTextColor={placeholderColor}
                       style={[inputStyle, { flex: 1, textAlign: "center" }]}
@@ -474,14 +457,13 @@ export default function ModalScreen() {
                   ))}
                 </View>
 
-                {/* Row 2: Weight per set */}
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   {(entry.lift_weights ?? []).map((val, sIdx) => (
                     <TextInput
                       key={`w-${sIdx}`}
                       value={val}
                       onChangeText={(v) => updateLiftArray(index, "lift_weights", sIdx, v)}
-                      placeholder={`Weight`}
+                      placeholder="Weight"
                       keyboardType="numeric"
                       placeholderTextColor={placeholderColor}
                       style={[inputStyle, { flex: 1, textAlign: "center" }]}
@@ -498,9 +480,7 @@ export default function ModalScreen() {
                 />
               </View>
             ) : (
-              // ---------------- TRACK MODE ----------------
               <View style={{ gap: 10 }}>
-                {/* Reps drives time boxes */}
                 <TextInput
                   value={entry.reps}
                   onChangeText={(v) => updateTrackSetsOrReps(index, "reps", v)}
@@ -510,110 +490,97 @@ export default function ModalScreen() {
                   style={inputStyle}
                 />
 
-<View style={{ flexDirection: "row", gap: 10 }}>
-  <Pressable
-    onPress={() => {
-      // turn ON times + rebuild grid
-      const setsN = Math.max(toPosInt(entry.sets), 1);
-      const repsN = Math.max(toPosInt(entry.reps), 0);
-      const prevTimes = Array.isArray(entry.set_times) ? entry.set_times : [[]];
-      const rebuilt = resizeSetTimes(prevTimes, setsN, repsN);
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <Pressable
+                    onPress={() => {
+                      const setsN = Math.max(toPosInt(entry.sets), 1);
+                      const repsN = Math.max(toPosInt(entry.reps), 0);
+                      const prevTimes = Array.isArray(entry.set_times) ? entry.set_times : [[]];
+                      const rebuilt = resizeSetTimes(prevTimes, setsN, repsN);
 
-      updateEntryField(index, {
-        timesApplicable: true,
-        set_times: rebuilt,
-      });
-    }}
-    style={{
-      flex: 1,
-      borderWidth: 1,
-      borderRadius: 999,
-      paddingVertical: 8,
-      alignItems: "center",
-      backgroundColor: entry.timesApplicable ? "black" : "transparent",
-    }}
-  >
-    <Text style={{ fontWeight: "700", color: entry.timesApplicable ? "white" : "black" }}>
-      Times Applicable
-    </Text>
-  </Pressable>
+                      updateEntryField(index, { timesApplicable: true, set_times: rebuilt });
+                    }}
+                    style={{
+                      flex: 1,
+                      borderWidth: 1,
+                      borderRadius: 999,
+                      paddingVertical: 8,
+                      alignItems: "center",
+                      backgroundColor: entry.timesApplicable ? "black" : "transparent",
+                    }}
+                  >
+                    <Text style={{ fontWeight: "700", color: entry.timesApplicable ? "white" : "black" }}>
+                      Times Applicable
+                    </Text>
+                  </Pressable>
 
-  <Pressable
-    onPress={() => {
-      // turn OFF times + clear times so nothing saves
-      updateEntryField(index, {
-        timesApplicable: false,
-        set_times: [[]],
-      });
-    }}
-    style={{
-      flex: 1,
-      borderWidth: 1,
-      borderRadius: 999,
-      paddingVertical: 8,
-      alignItems: "center",
-      backgroundColor: !entry.timesApplicable ? "black" : "transparent",
-    }}
-  >
-    <Text style={{ fontWeight: "700", color: !entry.timesApplicable ? "white" : "black" }}>
-      Times Not Applicable
-    </Text>
-  </Pressable>
-</View>
+                  <Pressable
+                    onPress={() => updateEntryField(index, { timesApplicable: false, set_times: [[]] })}
+                    style={{
+                      flex: 1,
+                      borderWidth: 1,
+                      borderRadius: 999,
+                      paddingVertical: 8,
+                      alignItems: "center",
+                      backgroundColor: !entry.timesApplicable ? "black" : "transparent",
+                    }}
+                  >
+                    <Text style={{ fontWeight: "700", color: !entry.timesApplicable ? "white" : "black" }}>
+                      Times Not Applicable
+                    </Text>
+                  </Pressable>
+                </View>
 
-{entry.timesApplicable && (
-  <>
-    {/* Set tabs */}
-    <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-      {Array.from({ length: Math.max(toPosInt(entry.sets), 1) }, (_, sIdx) => (
-        <Pressable
-          key={sIdx}
-          onPress={() => updateEntryField(index, { activeSet: sIdx })}
-          style={{
-            borderWidth: 1,
-            borderRadius: 999,
-            paddingVertical: 6,
-            paddingHorizontal: 10,
-            backgroundColor: entry.activeSet === sIdx ? "black" : "transparent",
-          }}
-        >
-          <Text
-            style={{
-              color: entry.activeSet === sIdx ? "white" : "black",
-              fontWeight: "700",
-            }}
-          >
-            Set {sIdx + 1}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
+                {entry.timesApplicable && (
+                  <>
+                    <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                      {Array.from({ length: Math.max(toPosInt(entry.sets), 1) }, (_, sIdx) => (
+                        <Pressable
+                          key={sIdx}
+                          onPress={() => updateEntryField(index, { activeSet: sIdx })}
+                          style={{
+                            borderWidth: 1,
+                            borderRadius: 999,
+                            paddingVertical: 6,
+                            paddingHorizontal: 10,
+                            backgroundColor: entry.activeSet === sIdx ? "black" : "transparent",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: entry.activeSet === sIdx ? "white" : "black",
+                              fontWeight: "700",
+                            }}
+                          >
+                            Set {sIdx + 1}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
 
-    {/* Times for active set */}
-    <View style={{ gap: 8 }}>
-      <Text style={{ fontWeight: "700" }}>
-        Times — Set {entry.activeSet + 1}
-      </Text>
+                    <View style={{ gap: 8 }}>
+                      <Text style={{ fontWeight: "700" }}>
+                        Times — Set {entry.activeSet + 1}
+                      </Text>
 
-      {(entry.set_times?.[entry.activeSet] ?? []).map((t, repIdx) => (
-        <TextInput
-          key={repIdx}
-          value={t}
-          onChangeText={(v) => {
-            const next = entry.set_times.map((row) => [...row]);
-            next[entry.activeSet][repIdx] = v;
-            updateEntryField(index, { set_times: next });
-          }}
-          placeholder={`Rep ${repIdx + 1} time`}
-          placeholderTextColor={placeholderColor}
-          style={inputStyle}
-        />
-      ))}
-    </View>
-  </>
-)}
+                      {(entry.set_times?.[entry.activeSet] ?? []).map((t, repIdx) => (
+                        <TextInput
+                          key={repIdx}
+                          value={t}
+                          onChangeText={(v) => {
+                            const next = entry.set_times.map((row) => [...row]);
+                            next[entry.activeSet][repIdx] = v;
+                            updateEntryField(index, { set_times: next });
+                          }}
+                          placeholder={`Rep ${repIdx + 1} time`}
+                          placeholderTextColor={placeholderColor}
+                          style={inputStyle}
+                        />
+                      ))}
+                    </View>
+                  </>
+                )}
 
-                {/* Optional single weight for track (sled/medball/etc.) */}
                 <TextInput
                   value={entry.weight}
                   onChangeText={(v) => updateEntryField(index, { weight: v })}
@@ -635,7 +602,10 @@ export default function ModalScreen() {
           </View>
         ))}
 
-        <PrimaryButton title={isLift ? "Add another lift" : "Add another rep/drill"} onPress={addEntry} />
+        <PrimaryButton
+          title={isLift ? "Add another lift" : "Add another rep/drill"}
+          onPress={addEntry}
+        />
 
         <Pressable
           onPress={saveWorkout}
@@ -659,9 +629,8 @@ export default function ModalScreen() {
         </Pressable>
 
         {!!status && <Text style={{ marginTop: 6 }}>{status}</Text>}
-      </ScrollView>
+      </FormScreen>
 
-      {/* Toast */}
       {toast.open && (
         <View
           pointerEvents="box-none"
