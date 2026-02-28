@@ -7,6 +7,8 @@ import PrimaryButton from "../../components/PrimaryButton";
 
 type Entry = {
   id: string;
+  exercise_id: string | null;
+  exercises?: { name: string } | null;
   exercise: string | null;
   reps: number | null;
   time: string | null;
@@ -83,7 +85,7 @@ export default function HomeScreen() {
     // 2) Today’s workout (most recent one today) + entries
     const todayRes = await supabase
       .from("workouts")
-      .select("id, workout_date, title, notes, workout_type, workout_entries(id, label, value, notes)")
+      .select(`id, workout_date, title, notes, workout_type, workout_entries(id, exercise_id, exercises(name), exercise, reps, time, weight, notes)`)
       .eq("workout_date", todayKey)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -159,7 +161,9 @@ export default function HomeScreen() {
             {todaysWorkout.workout_entries?.length ? (
               todaysWorkout.workout_entries.map((e) => (
                 <View key={e.id} style={{ borderWidth: 1, borderRadius: 14, padding: 12, gap: 6 }}>
-                  <Text style={{ fontWeight: "700" }}>{e.exercise ?? "Entry"}</Text>
+                  <Text style={{ fontWeight: "700" }}>
+                    {e.exercises?.name ?? e.exercise ?? "Entry"}
+                  </Text>
 {!!e.reps && <Text style={{ opacity: 0.8 }}>Reps: {e.reps}</Text>}
 {!!e.time && <Text style={{ opacity: 0.8 }}>Time: {e.time}</Text>}
 {e.weight !== null && <Text style={{ opacity: 0.8 }}>Weight: {e.weight}</Text>}
@@ -210,7 +214,7 @@ export default function HomeScreen() {
             return (
               <Pressable
                 key={key}
-                onPress={() => router.push(`/modal?date=${key}`)}
+                onPress={() => router.push(`/calendar/${key}`)}
                 style={{ width: `${100 / 7}%`, paddingVertical: 10, alignItems: "center" }}
               >
                 <View
@@ -260,7 +264,7 @@ export default function HomeScreen() {
         </View>
 
         <Text style={{ opacity: 0.7 }}>
-          Tap a day to log a workout for that date.
+          Tap a day to view workouts for that date.
         </Text>
       </View>
     </ScrollView>

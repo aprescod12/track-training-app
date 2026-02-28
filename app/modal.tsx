@@ -254,6 +254,32 @@ export default function ModalScreen() {
     });
   }
 
+  async function getOrCreateExerciseId(name: string) {
+    const cleaned = name.trim();
+    if (!cleaned) return null;
+  
+    // 1) Try find existing (case-insensitive)
+    const { data: existing, error: findErr } = await supabase
+      .from("exercises")
+      .select("exercise_id,name")
+      .ilike("name", cleaned)
+      .limit(1)
+      .maybeSingle();
+  
+    if (findErr) throw findErr;
+    if (existing?.exercise_id) return existing.exercise_id;
+  
+    // 2) Create
+    const { data: created, error: insErr } = await supabase
+      .from("exercises")
+      .insert([{ name: cleaned }])
+      .select("exercise_id")
+      .single();
+  
+    if (insErr) throw insErr;
+    return created.exercise_id;
+  }
+
   async function saveWorkout() {
     try {
       setSaving(true);
@@ -312,15 +338,22 @@ export default function ModalScreen() {
         })
         .filter((row) => row.exercise);
 
-      if (cleanedEntries.length) {
-        const payload = cleanedEntries.map((e) => ({
-          workout_id: workout.id,
-          ...e,
-        }));
-
-        const { error: eErr } = await supabase.from("workout_entries").insert(payload);
-        if (eErr) throw eErr;
-      }
+        if (cleanedEntries.length) {
+          // Create/link exercises first
+          const payload = [];
+        
+          for (const e of cleanedEntries) {
+            const exId = await getOrCreateExerciseId(e.exercise ?? "");
+            payload.push({
+              workout_id: workout.id,
+              exercise_id: exId,              
+              ...e,
+            });
+          }
+        
+          const { error: eErr } = await supabase.from("workout_entries").insert(payload);
+          if (eErr) throw eErr;
+        }
 
       showToast("Workout saved ✅");
     } catch (e: any) {

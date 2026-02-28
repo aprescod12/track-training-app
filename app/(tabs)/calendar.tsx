@@ -273,32 +273,41 @@ export default function CalendarScreen() {
       </View>
 
       {/* Selected day list */}
-      <View style={{ borderWidth: 1, borderRadius: 14, padding: 14, gap: 10 }}>
-        <Text style={{ fontSize: 16, fontWeight: "800" }}>
-          {selectedDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
-        </Text>
+<View style={{ borderWidth: 1, borderRadius: 14, padding: 14, gap: 10 }}>
+  <Text style={{ fontSize: 16, fontWeight: "800" }}>
+    {selectedDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+  </Text>
 
-        {selectedDayWorkouts.length ? (
-          selectedDayWorkouts.map((w) => (
-            <Pressable
-              key={w.id}
-              onPress={() => router.push(`/workout/${w.id}`)}
-              style={{ borderWidth: 1, borderRadius: 14, padding: 12, gap: 6 }}
-            >
-              <Text style={{ fontWeight: "800" }}>{w.title}</Text>
-              {!!w.notes && <Text numberOfLines={2}>{w.notes}</Text>}
-              <Text style={{ fontWeight: "700" }}>View →</Text>
-            </Pressable>
-          ))
-        ) : (
-          <Text style={{ opacity: 0.7 }}>No workouts logged for this day.</Text>
-        )}
+  {selectedDayWorkouts.length ? (
+    <>
+      {selectedDayWorkouts.map((w) => (
+        <Pressable
+          key={w.id}
+          onPress={() => router.push(`/workout/${w.id}`)}
+          style={{ borderWidth: 1, borderRadius: 14, padding: 12, gap: 6 }}
+        >
+          <Text style={{ fontWeight: "800" }}>{w.title}</Text>
+          {!!w.notes && <Text numberOfLines={2}>{w.notes}</Text>}
+          <Text style={{ fontWeight: "700" }}>View →</Text>
+        </Pressable>
+      ))}
 
-        <PrimaryButton
-          title="Log workout for this day"
-          onPress={() => router.push(`/modal?date=${selectedKey}`)}
-        />
-      </View>
-    </ScrollView>
+      <PrimaryButton
+        title="View workouts on this day"
+        onPress={() => router.push(`/calendar/${selectedKey}`)}
+      />
+    </>
+  ) : (
+    <>
+      <Text style={{ opacity: 0.7 }}>No workouts logged for this day.</Text>
+
+      <PrimaryButton
+        title="Log workout for this day"
+        onPress={() => router.push(`/modal?date=${selectedKey}`)}
+      />
+    </>
+  )}
+</View>
+</ScrollView>
   );
 }

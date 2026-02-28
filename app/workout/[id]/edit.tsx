@@ -16,6 +16,7 @@ type WorkoutRow = {
 
 type EntryRow = {
   id: string;
+  exercise_id: string | null;
   exercise: string | null;
   sets: number | null;
   reps: number | null;
@@ -30,6 +31,7 @@ type EntryDraft = {
   id?: string;  // DB id (existing rows)
   key: string;  // stable key for React list
 
+  exercise_id?: string | null;
   exercise: string;
   sets: string;
 
@@ -148,6 +150,7 @@ export default function EditWorkout() {
         workout_type,
         workout_entries(
           id,
+          exercise_id,
           exercise,
           sets,
           reps,
@@ -189,7 +192,8 @@ export default function EditWorkout() {
 
       return {
         id: e.id,
-        key: e.id, // ✅ stable list key
+        key: e.id,
+        exercise_id: (e as any).exercise_id ?? null,
         exercise: e.exercise ?? "",
         sets: String(setsN),
 
@@ -342,6 +346,45 @@ export default function EditWorkout() {
     });
   }
 
+  async function getOrCreateExerciseId(name: string) {
+    const cleaned = name.trim();
+    if (!cleaned) return null;
+  
+    const { data: existing, error: findErr } = await supabase
+      .from("exercises")
+      .select("exercise_id")
+      .ilike("name", cleaned)
+      .limit(1)
+      .maybeSingle();
+  
+    if (findErr) throw findErr;
+    if (existing?.exercise_id) return existing.exercise_id;
+  
+    const { data: created, error: insertErr } = await supabase
+      .from("exercises")
+      .insert([{ name: cleaned }])
+      .select("exercise_id")
+      .single();
+  
+    if (!insertErr) return created.exercise_id;
+  
+    // unique violation (race condition) -> retry fetch
+    if (insertErr.code === "23505") {
+      const { data: retry, error: retryErr } = await supabase
+        .from("exercises")
+        .select("exercise_id")
+        .ilike("name", cleaned)
+        .limit(1)
+        .maybeSingle();
+  
+      if (retryErr) throw retryErr;
+      if (!retry?.exercise_id) throw new Error("Exercise exists but could not be fetched.");
+      return retry.exercise_id;
+    }
+  
+    throw insertErr;
+  }
+
   async function save() {
     if (!id) return;
 
@@ -367,6 +410,8 @@ export default function EditWorkout() {
         const exercise = e.exercise.trim();
         if (!exercise) continue;
 
+        const exercise_id = await getOrCreateExerciseId(exercise);
+
         const setsN = Math.max(toPosInt(e.sets), 1);
 
         if (workoutType === "lift") {
@@ -378,6 +423,7 @@ export default function EditWorkout() {
 
           const row = {
             workout_id: id,
+            exercise_id,
             exercise,
             sets: setsN,
             lift_reps,
@@ -397,6 +443,7 @@ export default function EditWorkout() {
 
           const row = {
             workout_id: id,
+            exercise_id,
             exercise,
             sets: setsN,
             reps: repsN || null,

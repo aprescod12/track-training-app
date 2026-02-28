@@ -6,21 +6,15 @@ import { supabase } from "../../lib/supabase";
 
 type Entry = {
   id: string;
+  exercise_id: string | null;
+  exercises?: { name: string } | null;
   exercise: string | null;
-
-  // shared-ish
   sets: number | null;
   notes: string | null;
-
-  // track
   reps: number | null;
-  set_times: string[][] | null; // ✅ NEW
-
-  // lift
-  lift_reps: (number | null)[] | null;     // ✅ NEW
-  lift_weights: (number | null)[] | null;  // ✅ NEW
-
-  // optional track weight
+  set_times: string[][] | null;
+  lift_reps: (number | null)[] | null;
+  lift_weights: (number | null)[] | null;
   weight: number | null;
 };
 
@@ -66,6 +60,8 @@ export default function WorkoutDetail() {
         notes,
         workout_entries(
           id,
+          exercise_id,
+          exercises(name),
           exercise,
           sets,
           reps,
@@ -134,7 +130,9 @@ export default function WorkoutDetail() {
                     key={e.id}
                     style={{ borderWidth: 1, borderRadius: 14, padding: 12, gap: 6 }}
                   >
-                    <Text style={{ fontWeight: "700" }}>{e.exercise ?? "Entry"}</Text>
+                    <Text style={{ fontWeight: "700" }}>
+                      {e.exercises?.name ?? e.exercise ?? "Entry"}
+                    </Text>
 
                     {/* Shared */}
                     {e.sets !== null && <Text style={{ opacity: 0.8 }}>Sets: {e.sets}</Text>}
