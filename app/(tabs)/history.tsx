@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
-import { View, Text, ScrollView } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { View, Text } from "react-native";
 import { supabase } from "../../lib/supabase";
+import FormScreen from "../../components/FormScreen";
+import { useAppColors } from "../../lib/theme";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type Workout = {
   id: string;
@@ -10,38 +13,67 @@ type Workout = {
 };
 
 export default function HistoryScreen() {
+  const c = useAppColors();
+
   const [items, setItems] = useState<Workout[]>([]);
   const [status, setStatus] = useState("Loading...");
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      setStatus("Loading...");
-      const { data, error } = await supabase
-        .from("workouts")
-        .select("id, workout_date, title, notes")
-        .order("workout_date", { ascending: false })
-        .limit(20);
+  const load = useCallback(async () => {
+    setStatus("Loading...");
+    const { data, error } = await supabase
+      .from("workouts")
+      .select("id, workout_date, title, notes")
+      .order("workout_date", { ascending: false })
+      .limit(20);
 
-      if (error) setStatus("Error: " + error.message);
-      else {
-        setItems(data ?? []);
-        setStatus((data?.length ?? 0) ? "Loaded ✅" : "No workouts yet");
-      }
-    })();
+    if (error) {
+      setStatus("Error: " + error.message);
+      setItems([]);
+      return;
+    }
+
+    setItems((data ?? []) as Workout[]);
+    setStatus((data?.length ?? 0) ? "Loaded ✅" : "No workouts yet");
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-      <Text style={{ fontSize: 22, fontWeight: "800" }}>History</Text>
-      <Text>{status}</Text>
+    <FormScreen
+      refreshControlProps={{
+        refreshing,
+        onRefresh,
+      }}
+    >
+      <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>History</Text>
+      <Text style={{ color: c.subtext }}>{status}</Text>
 
       {items.map((w) => (
-        <View key={w.id} style={{ borderWidth: 1, borderRadius: 14, padding: 12, gap: 6 }}>
-          <Text style={{ fontWeight: "800" }}>{w.title}</Text>
-          <Text style={{ opacity: 0.7 }}>{w.workout_date}</Text>
-          {!!w.notes && <Text>{w.notes}</Text>}
+        <View
+          key={w.id}
+          style={{
+            borderWidth: 1,
+            borderColor: c.border,
+            backgroundColor: c.card,
+            borderRadius: 14,
+            padding: 12,
+            gap: 6,
+          }}
+        >
+          <Text style={{ fontWeight: "800", color: c.text }}>{w.title}</Text>
+          <Text style={{ color: c.subtext }}>{w.workout_date}</Text>
+          {!!w.notes && <Text style={{ color: c.text }}>{w.notes}</Text>}
         </View>
       ))}
-    </ScrollView>
+    </FormScreen>
   );
 }

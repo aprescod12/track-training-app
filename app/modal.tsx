@@ -13,18 +13,10 @@ import PrimaryButton from "../components/PrimaryButton";
 import FormScreen from "../components/FormScreen";
 import { supabase } from "../lib/supabase";
 import { formatYMD } from "../lib/date";
+import { getOrCreateExerciseId } from "../lib/exercises";
+import { useAppColors } from "../lib/theme";
 
 type ToastState = { open: boolean; message: string };
-
-// ---- Shared input styling (dark-mode safe) ----
-const placeholderColor = "#8A8A8A";
-const inputStyle = {
-  borderWidth: 1,
-  borderRadius: 12,
-  padding: 12,
-  backgroundColor: "white",
-  color: "black",
-} as const;
 
 type EntryDraft = {
   exercise: string;
@@ -70,6 +62,18 @@ function resizeSetTimes(prev: string[][], setsN: number, repsN: number) {
 }
 
 export default function ModalScreen() {
+  const c = useAppColors();
+
+  const placeholderColor = "#8A8A8A";
+  const inputStyle = {
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: c.card,
+    color: c.text,
+  } as const;
+
   const params = useLocalSearchParams<{ date?: string }>();
 
   const [date] = useState(() =>
@@ -254,32 +258,6 @@ export default function ModalScreen() {
     });
   }
 
-  async function getOrCreateExerciseId(name: string) {
-    const cleaned = name.trim();
-    if (!cleaned) return null;
-  
-    // 1) Try find existing (case-insensitive)
-    const { data: existing, error: findErr } = await supabase
-      .from("exercises")
-      .select("exercise_id,name")
-      .ilike("name", cleaned)
-      .limit(1)
-      .maybeSingle();
-  
-    if (findErr) throw findErr;
-    if (existing?.exercise_id) return existing.exercise_id;
-  
-    // 2) Create
-    const { data: created, error: insErr } = await supabase
-      .from("exercises")
-      .insert([{ name: cleaned }])
-      .select("exercise_id")
-      .single();
-  
-    if (insErr) throw insErr;
-    return created.exercise_id;
-  }
-
   async function saveWorkout() {
     try {
       setSaving(true);
@@ -338,22 +316,23 @@ export default function ModalScreen() {
         })
         .filter((row) => row.exercise);
 
-        if (cleanedEntries.length) {
-          // Create/link exercises first
-          const payload = [];
-        
-          for (const e of cleanedEntries) {
-            const exId = await getOrCreateExerciseId(e.exercise ?? "");
-            payload.push({
-              workout_id: workout.id,
-              exercise_id: exId,              
-              ...e,
-            });
-          }
-        
-          const { error: eErr } = await supabase.from("workout_entries").insert(payload);
-          if (eErr) throw eErr;
+      if (cleanedEntries.length) {
+        const payload = [];
+
+        for (const e of cleanedEntries) {
+          const exId = await getOrCreateExerciseId(e.exercise ?? "");
+          if (!exId) continue;
+
+          payload.push({
+            workout_id: workout.id,
+            exercise_id: exId,
+            ...e,
+          });
         }
+
+        const { error: eErr } = await supabase.from("workout_entries").insert(payload);
+        if (eErr) throw eErr;
+      }
 
       showToast("Workout saved ✅");
     } catch (e: any) {
@@ -364,23 +343,25 @@ export default function ModalScreen() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
       <FormScreen>
         <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
           <Pressable
             onPress={() => router.back()}
             style={{
               borderWidth: 1,
+              borderColor: c.border,
               borderRadius: 999,
               paddingVertical: 6,
               paddingHorizontal: 14,
+              backgroundColor: c.card,
             }}
           >
-            <Text style={{ fontWeight: "600" }}>Cancel</Text>
+            <Text style={{ fontWeight: "600", color: c.text }}>Cancel</Text>
           </Pressable>
         </View>
 
-        <Text style={{ fontSize: 22, fontWeight: "800" }}>
+        <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>
           {isLift ? "Log Lift" : "Log Track"}
         </Text>
 
@@ -390,13 +371,14 @@ export default function ModalScreen() {
             style={{
               flex: 1,
               borderWidth: 1,
+              borderColor: c.border,
               borderRadius: 999,
               paddingVertical: 10,
               alignItems: "center",
-              backgroundColor: workoutType === "track" ? "black" : "transparent",
+              backgroundColor: workoutType === "track" ? c.primary : "transparent",
             }}
           >
-            <Text style={{ fontWeight: "700", color: workoutType === "track" ? "white" : "black" }}>
+            <Text style={{ fontWeight: "700", color: workoutType === "track" ? c.primaryText : c.text }}>
               Track
             </Text>
           </Pressable>
@@ -406,20 +388,21 @@ export default function ModalScreen() {
             style={{
               flex: 1,
               borderWidth: 1,
+              borderColor: c.border,
               borderRadius: 999,
               paddingVertical: 10,
               alignItems: "center",
-              backgroundColor: workoutType === "lift" ? "black" : "transparent",
+              backgroundColor: workoutType === "lift" ? c.primary : "transparent",
             }}
           >
-            <Text style={{ fontWeight: "700", color: workoutType === "lift" ? "white" : "black" }}>
+            <Text style={{ fontWeight: "700", color: workoutType === "lift" ? c.primaryText : c.text }}>
               Lift
             </Text>
           </Pressable>
         </View>
 
-        <Text style={{ opacity: 0.7 }}>Date</Text>
-        <Text style={{ fontWeight: "700" }}>{date}</Text>
+        <Text style={{ color: c.subtext }}>Date</Text>
+        <Text style={{ fontWeight: "700", color: c.text }}>{date}</Text>
 
         <TextInput
           value={title}
@@ -438,15 +421,22 @@ export default function ModalScreen() {
           style={[inputStyle, { minHeight: 80 }]}
         />
 
-        <Text style={{ fontWeight: "700" }}>Entries</Text>
+        <Text style={{ fontWeight: "700", color: c.text }}>Entries</Text>
 
         {entries.map((entry, index) => (
           <View
             key={index}
-            style={{ borderWidth: 1, borderRadius: 14, padding: 12, gap: 10 }}
+            style={{
+              borderWidth: 1,
+              borderColor: c.border,
+              backgroundColor: c.card,
+              borderRadius: 14,
+              padding: 12,
+              gap: 10,
+            }}
           >
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Text style={{ fontWeight: "800" }}>Entry {index + 1}</Text>
+              <Text style={{ fontWeight: "800", color: c.text }}>Entry {index + 1}</Text>
               <Pressable onPress={() => removeEntry(index)}>
                 <Text style={{ color: "red", fontWeight: "700" }}>Remove</Text>
               </Pressable>
@@ -474,7 +464,7 @@ export default function ModalScreen() {
 
             {isLift ? (
               <View style={{ gap: 10 }}>
-                <Text style={{ fontWeight: "800" }}>Per-set log</Text>
+                <Text style={{ fontWeight: "800", color: c.text }}>Per-set log</Text>
 
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   {(entry.lift_reps ?? []).map((val, sIdx) => (
@@ -536,13 +526,14 @@ export default function ModalScreen() {
                     style={{
                       flex: 1,
                       borderWidth: 1,
+                      borderColor: c.border,
                       borderRadius: 999,
                       paddingVertical: 8,
                       alignItems: "center",
-                      backgroundColor: entry.timesApplicable ? "black" : "transparent",
+                      backgroundColor: entry.timesApplicable ? c.primary : "transparent",
                     }}
                   >
-                    <Text style={{ fontWeight: "700", color: entry.timesApplicable ? "white" : "black" }}>
+                    <Text style={{ fontWeight: "700", color: entry.timesApplicable ? c.primaryText : c.text }}>
                       Times Applicable
                     </Text>
                   </Pressable>
@@ -552,13 +543,14 @@ export default function ModalScreen() {
                     style={{
                       flex: 1,
                       borderWidth: 1,
+                      borderColor: c.border,
                       borderRadius: 999,
                       paddingVertical: 8,
                       alignItems: "center",
-                      backgroundColor: !entry.timesApplicable ? "black" : "transparent",
+                      backgroundColor: !entry.timesApplicable ? c.primary : "transparent",
                     }}
                   >
-                    <Text style={{ fontWeight: "700", color: !entry.timesApplicable ? "white" : "black" }}>
+                    <Text style={{ fontWeight: "700", color: !entry.timesApplicable ? c.primaryText : c.text }}>
                       Times Not Applicable
                     </Text>
                   </Pressable>
@@ -573,15 +565,16 @@ export default function ModalScreen() {
                           onPress={() => updateEntryField(index, { activeSet: sIdx })}
                           style={{
                             borderWidth: 1,
+                            borderColor: c.border,
                             borderRadius: 999,
                             paddingVertical: 6,
                             paddingHorizontal: 10,
-                            backgroundColor: entry.activeSet === sIdx ? "black" : "transparent",
+                            backgroundColor: entry.activeSet === sIdx ? c.primary : "transparent",
                           }}
                         >
                           <Text
                             style={{
-                              color: entry.activeSet === sIdx ? "white" : "black",
+                              color: entry.activeSet === sIdx ? c.primaryText : c.text,
                               fontWeight: "700",
                             }}
                           >
@@ -592,7 +585,7 @@ export default function ModalScreen() {
                     </View>
 
                     <View style={{ gap: 8 }}>
-                      <Text style={{ fontWeight: "700" }}>
+                      <Text style={{ fontWeight: "700", color: c.text }}>
                         Times — Set {entry.activeSet + 1}
                       </Text>
 
@@ -645,6 +638,8 @@ export default function ModalScreen() {
           disabled={saving}
           style={{
             borderWidth: 1,
+            borderColor: c.border,
+            backgroundColor: c.card,
             borderRadius: 12,
             padding: 14,
             alignItems: "center",
@@ -654,14 +649,14 @@ export default function ModalScreen() {
           {saving ? (
             <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
               <ActivityIndicator />
-              <Text style={{ fontSize: 16, fontWeight: "600" }}>Saving…</Text>
+              <Text style={{ fontSize: 16, fontWeight: "600", color: c.text }}>Saving…</Text>
             </View>
           ) : (
-            <Text style={{ fontSize: 16, fontWeight: "600" }}>Save workout</Text>
+            <Text style={{ fontSize: 16, fontWeight: "600", color: c.text }}>Save workout</Text>
           )}
         </Pressable>
 
-        {!!status && <Text style={{ marginTop: 6 }}>{status}</Text>}
+        {!!status && <Text style={{ marginTop: 6, color: c.text }}>{status}</Text>}
       </FormScreen>
 
       {toast.open && (
@@ -686,10 +681,11 @@ export default function ModalScreen() {
                 transform: [{ translateY }],
                 opacity,
                 borderWidth: 1,
+                borderColor: c.border,
                 borderRadius: 18,
                 paddingVertical: 12,
                 paddingHorizontal: 14,
-                backgroundColor: "white",
+                backgroundColor: c.card,
               }}
             >
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -699,19 +695,20 @@ export default function ModalScreen() {
                     height: 26,
                     borderRadius: 999,
                     borderWidth: 1,
+                    borderColor: c.border,
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <Text style={{ fontWeight: "900" }}>✓</Text>
+                  <Text style={{ fontWeight: "900", color: c.text }}>✓</Text>
                 </View>
 
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: "800" }}>{toast.message}</Text>
-                  <Text style={{ opacity: 0.7 }}>Back to Workouts…</Text>
+                  <Text style={{ fontWeight: "800", color: c.text }}>{toast.message}</Text>
+                  <Text style={{ color: c.subtext }}>Back to Workouts…</Text>
                 </View>
 
-                <Text style={{ opacity: 0.7 }}>Tap</Text>
+                <Text style={{ color: c.subtext }}>Tap</Text>
               </View>
             </Animated.View>
           </Pressable>

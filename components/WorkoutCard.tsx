@@ -1,10 +1,36 @@
-import { View, Text } from "react-native";
+import { View, Text, Pressable } from "react-native";
+import { useAppColors } from "../lib/theme";
 
-export default function WorkoutCard({ title, subtitle }: { title: string; subtitle?: string }) {
+type Props = {
+  title: string;
+  subtitle?: string;
+  onPress?: () => void;
+};
+
+export default function WorkoutCard({ title, subtitle, onPress }: Props) {
+  const c = useAppColors();
+
   return (
-    <View style={{ borderWidth: 1, borderRadius: 12, padding: 14, gap: 6 }}>
-      <Text style={{ fontSize: 16, fontWeight: "700" }}>{title}</Text>
-      {!!subtitle && <Text>{subtitle}</Text>}
-    </View>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        borderWidth: 1,
+        borderColor: c.border,
+        borderRadius: 14,
+        padding: 14,
+        backgroundColor: c.card,
+        opacity: pressed ? 0.9 : 1,
+      })}
+    >
+      <Text style={{ fontWeight: "800", fontSize: 16, color: c.text }}>
+        {title}
+      </Text>
+
+      {subtitle ? (
+        <Text style={{ marginTop: 4, color: c.subtext }}>
+          {subtitle}
+        </Text>
+      ) : null}
+    </Pressable>
   );
 }

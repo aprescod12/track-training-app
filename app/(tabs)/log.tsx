@@ -5,6 +5,8 @@ import PrimaryButton from "../../components/PrimaryButton";
 import { supabase } from "../../lib/supabase";
 import { formatYMD } from "../../lib/date";
 import FormScreen from "../../components/FormScreen";
+import { useAppColors } from "../../lib/theme";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type Workout = {
   id: string;
@@ -14,6 +16,8 @@ type Workout = {
 };
 
 export default function WorkoutsScreen() {
+  const c = useAppColors();
+
   const [items, setItems] = useState<Workout[]>([]);
   const [status, setStatus] = useState("Loading...");
   const [refreshing, setRefreshing] = useState(false);
@@ -61,45 +65,65 @@ export default function WorkoutsScreen() {
       }}
     >
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Text style={{ fontSize: 22, fontWeight: "800" }}>Workouts</Text>
+        <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Workouts</Text>
         <PrimaryButton title="Log workout" onPress={() => router.push("/modal")} />
       </View>
 
-      <Text style={{ opacity: 0.7 }}>{status}</Text>
+      <Text style={{ color: c.subtext }}>{status}</Text>
 
       {/* Today */}
-      <View style={{ borderWidth: 1, borderRadius: 14, padding: 12, gap: 6 }}>
-        <Text style={{ fontWeight: "800" }}>Today</Text>
+      <View
+        style={{
+          borderWidth: 1,
+          borderColor: c.border,
+          backgroundColor: c.card,
+          borderRadius: 14,
+          padding: 12,
+          gap: 6,
+        }}
+      >
+        <Text style={{ fontWeight: "800", color: c.text }}>Today</Text>
         {todaysWorkout ? (
           <>
-            <Text style={{ fontWeight: "700" }}>{todaysWorkout.title}</Text>
-            {!!todaysWorkout.notes && <Text>{todaysWorkout.notes}</Text>}
+            <Text style={{ fontWeight: "700", color: c.text }}>{todaysWorkout.title}</Text>
+            {!!todaysWorkout.notes && <Text style={{ color: c.text }}>{todaysWorkout.notes}</Text>}
             <Pressable onPress={() => router.push(`/workout/${todaysWorkout.id}`)}>
-              <Text style={{ marginTop: 6, fontWeight: "700" }}>View details →</Text>
+              <Text style={{ marginTop: 6, fontWeight: "700", color: c.text }}>View details →</Text>
             </Pressable>
           </>
         ) : (
           <>
-            <Text style={{ opacity: 0.7 }}>No workout logged today.</Text>
+            <Text style={{ color: c.subtext }}>No workout logged today.</Text>
             <Pressable onPress={() => router.push("/modal")}>
-              <Text style={{ marginTop: 6, fontWeight: "700" }}>Log today’s workout →</Text>
+              <Text style={{ marginTop: 6, fontWeight: "700", color: c.text }}>Log today’s workout →</Text>
             </Pressable>
           </>
         )}
       </View>
 
       {/* Recent */}
-      <Text style={{ fontWeight: "800" }}>Recent</Text>
+      <Text style={{ fontWeight: "800", color: c.text }}>Recent</Text>
 
       {items.map((w) => (
         <Pressable
           key={w.id}
           onPress={() => router.push(`/workout/${w.id}`)}
-          style={{ borderWidth: 1, borderRadius: 14, padding: 12, gap: 6 }}
+          style={{
+            borderWidth: 1,
+            borderColor: c.border,
+            backgroundColor: c.card,
+            borderRadius: 14,
+            padding: 12,
+            gap: 6,
+          }}
         >
-          <Text style={{ fontWeight: "800" }}>{w.title}</Text>
-          <Text style={{ opacity: 0.7 }}>{w.workout_date}</Text>
-          {!!w.notes && <Text numberOfLines={2}>{w.notes}</Text>}
+          <Text style={{ fontWeight: "800", color: c.text }}>{w.title}</Text>
+          <Text style={{ color: c.subtext }}>{w.workout_date}</Text>
+          {!!w.notes && (
+            <Text numberOfLines={2} style={{ color: c.subtext }}>
+              {w.notes}
+            </Text>
+          )}
         </Pressable>
       ))}
     </FormScreen>

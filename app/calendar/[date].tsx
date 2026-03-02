@@ -1,8 +1,18 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  useWindowDimensions,
+} from "react-native";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
+import FormScreen from "../../components/FormScreen";
 import { supabase } from "../../lib/supabase";
 import PrimaryButton from "../../components/PrimaryButton";
+import { useAppColors } from "../../lib/theme";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type Entry = {
   id: string;
@@ -21,8 +31,13 @@ type Workout = {
 };
 
 export default function CalendarDayScreen() {
+  const c = useAppColors();
+
   const { date } = useLocalSearchParams<{ date: string }>();
   const day = typeof date === "string" ? date : "";
+
+  const { width } = useWindowDimensions();
+  const isWide = width >= 420;
 
   const [status, setStatus] = useState("Loading...");
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -35,7 +50,8 @@ export default function CalendarDayScreen() {
 
     const { data, error } = await supabase
       .from("workouts")
-      .select(`
+      .select(
+        `
         id,
         workout_date,
         title,
@@ -47,7 +63,8 @@ export default function CalendarDayScreen() {
           exercises(name),
           exercise
         )
-      `)
+      `
+      )
       .eq("workout_date", day)
       .order("created_at", { ascending: false });
 
@@ -69,60 +86,137 @@ export default function CalendarDayScreen() {
     }, [load])
   );
 
+  const pagePad = 16;
+  const cardMaxWidth = isWide ? 560 : undefined;
+
+  function formatPrettyDate(ymd: string) {
+    const d = new Date(ymd + "T00:00:00"); // prevent timezone shift
+    if (isNaN(d.getTime())) return ymd;
+
+    const month = d.toLocaleString(undefined, { month: "long" });
+    const dd = d.getDate();
+    const year = d.getFullYear();
+
+    function ordinal(n: number) {
+      if (n % 100 >= 11 && n % 100 <= 13) return `${n}th`;
+      switch (n % 10) {
+        case 1:
+          return `${n}st`;
+        case 2:
+          return `${n}nd`;
+        case 3:
+          return `${n}rd`;
+        default:
+          return `${n}th`;
+      }
+    }
+
+    return `${month} ${ordinal(dd)}, ${year}`;
+  }
+
+  const cardStyle = {
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.card,
+    borderRadius: 16,
+    padding: 14,
+    alignSelf: "center" as const,
+    width: "100%" as const,
+    maxWidth: cardMaxWidth,
+  };
+
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={{ fontWeight: "800" }}>← Back</Text>
-        </Pressable>
-
-        <PrimaryButton
-          title="Log workout"
-          onPress={() => router.push(`/modal?date=${day}`)}
-        />
-      </View>
-
-      <Text style={{ fontSize: 22, fontWeight: "900" }}>{day}</Text>
-      <Text style={{ opacity: 0.7 }}>{status}</Text>
-
-      {loading && (
-        <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-          <ActivityIndicator />
-          <Text>Loading…</Text>
-        </View>
-      )}
-
-      {workouts.length ? (
-        workouts.map((w) => (
-          <Pressable
-            key={w.id}
-            onPress={() => router.push(`/workout/${w.id}`)}
-            style={{ borderWidth: 1, borderRadius: 14, padding: 12, gap: 6 }}
-          >
-            <Text style={{ fontWeight: "900" }}>{w.title}</Text>
-            <Text style={{ opacity: 0.7 }}>
-              {w.workout_type === "track" ? "Track" : "Lift"}
-            </Text>
-
-            {!!w.notes && <Text style={{ opacity: 0.85 }}>{w.notes}</Text>}
-
-            <View style={{ marginTop: 6, gap: 4 }}>
-              <Text style={{ fontWeight: "800" }}>Exercises</Text>
-              {w.workout_entries?.length ? (
-                w.workout_entries.map((e) => (
-                  <Text key={e.id} style={{ opacity: 0.85 }}>
-                    • {e.exercises?.name ?? e.exercise ?? "Entry"}
-                  </Text>
-                ))
-              ) : (
-                <Text style={{ opacity: 0.7 }}>No entries.</Text>
-              )}
-            </View>
+    <FormScreen>
+      <ScrollView
+        contentContainerStyle={{
+          padding: pagePad,
+          paddingBottom: 28,
+          gap: 12,
+        }}
+      >
+        {/* Top bar */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <Pressable onPress={() => router.back()} style={{ paddingVertical: 8, paddingRight: 8 }}>
+            <Text style={{ fontWeight: "800", color: c.text }}>← Back</Text>
           </Pressable>
-        ))
-      ) : (
-        <Text style={{ opacity: 0.7 }}>No workouts logged on this day.</Text>
-      )}
-    </ScrollView>
+
+          <View style={{ flex: 1 }} />
+
+          <PrimaryButton title="Log workout" onPress={() => router.push(`/modal?date=${day}`)} />
+        </View>
+
+        {/* Header */}
+        <View style={{ ...cardStyle, gap: 6 }}>
+          <Text style={{ fontSize: 22, fontWeight: "900", color: c.text }}>
+            {day ? formatPrettyDate(day) : "Selected day"}
+          </Text>
+          <Text style={{ color: c.subtext }}>{status}</Text>
+
+          {loading && (
+            <View style={{ flexDirection: "row", gap: 10, alignItems: "center", marginTop: 6 }}>
+              <ActivityIndicator />
+              <Text style={{ color: c.text }}>Loading…</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Workouts */}
+        {workouts.length ? (
+          workouts.map((w) => (
+            <Pressable
+              key={w.id}
+              onPress={() => router.push(`/workout/${w.id}`)}
+              style={({ pressed }) => ({
+                ...cardStyle,
+                gap: 8,
+                opacity: pressed ? 0.92 : 1,
+              })}
+            >
+              <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 10 }}>
+                <Text style={{ fontWeight: "900", flexShrink: 1, color: c.text }} numberOfLines={2}>
+                  {w.title}
+                </Text>
+                <Text style={{ color: c.subtext, fontWeight: "700" }}>
+                  {w.workout_type === "track" ? "Track" : "Lift"}
+                </Text>
+              </View>
+
+              {!!w.notes && (
+                <Text style={{ color: c.subtext }} numberOfLines={3}>
+                  {w.notes}
+                </Text>
+              )}
+
+              <View style={{ gap: 4 }}>
+                <Text style={{ fontWeight: "800", color: c.text }}>Exercises</Text>
+                {w.workout_entries?.length ? (
+                  w.workout_entries.map((e) => (
+                    <Text key={e.id} style={{ color: c.subtext }} numberOfLines={2}>
+                      • {e.exercises?.name ?? e.exercise ?? "Entry"}
+                    </Text>
+                  ))
+                ) : (
+                  <Text style={{ color: c.subtext }}>No entries.</Text>
+                )}
+              </View>
+
+              <Text style={{ fontWeight: "800", marginTop: 4, color: c.text }}>View details →</Text>
+            </Pressable>
+          ))
+        ) : (
+          <View style={{ ...cardStyle, gap: 8 }}>
+            <Text style={{ color: c.subtext }}>No workouts logged on this day.</Text>
+            <PrimaryButton title="Log one now" onPress={() => router.push(`/modal?date=${day}`)} />
+          </View>
+        )}
+      </ScrollView>
+    </FormScreen>
   );
 }
