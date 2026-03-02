@@ -89,9 +89,21 @@ export default function HomeScreen() {
 
     // 1) Welcome label
     try {
-      const { data } = await supabase.auth.getSession();
-      const email = data.session?.user?.email;
-      setUserLabel(email ? `Welcome, ${email}` : "Welcome back");
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+    
+      const fullName = user?.user_metadata?.full_name?.trim();
+    
+      if (fullName) {
+        const firstName = fullName.split(" ")[0];
+        setUserLabel(`Welcome, ${firstName}`);
+      } else if (user?.email) {
+        const fallback = user.email.split("@")[0];
+        setUserLabel(`Welcome, ${fallback}`);
+      } else {
+        setUserLabel("Welcome back");
+      }
     } catch {
       setUserLabel("Welcome back");
     }
@@ -197,16 +209,18 @@ export default function HomeScreen() {
       .from("workout_entries")
       .select(`
         id,
+        created_at,
         time,
         times,
         set_times,
         lift_reps,
         lift_weights,
-        workouts!inner(workout_date, workout_type),
+        workouts(workout_date, workout_type),
         exercises(name)
       `)
       .eq("exercise_id", exercise_id)
-      .order("workouts.workout_date", { ascending: false })
+      .order("workout_date", { ascending: false, foreignTable: "workouts" })
+      .order("created_at", { ascending: false })
       .limit(12);
   
     if (error) {
@@ -220,6 +234,74 @@ export default function HomeScreen() {
 
   const dotTrack = c.dark ? "#34D399" : "green";
   const dotLift = c.dark ? "#60A5FA" : "blue";
+
+  function normalizeTimes(x: any): string[] {
+    if (x == null) return [];
+  
+    // If it's already a string, treat as one time
+    if (typeof x === "string") return [x];
+  
+    if (!Array.isArray(x)) return [];
+  
+    // Case A: nested arrays (e.g., [["28.7","28.3"]])
+    if (Array.isArray(x[0])) {
+      return x
+        .flat()
+        .map((t: any) => String(t))
+        .map((t) => t.trim())
+        .filter(Boolean);
+    }
+  
+    // Case B: flat array of strings (e.g., ["28.7","28.3"])
+    // OR Postgres array-as-string inside a text[] slot (e.g., ["{28.7,28.3}"])
+    const out: string[] = [];
+    for (const item of x) {
+      if (item == null) continue;
+  
+      const s = String(item).trim();
+      if (!s) continue;
+  
+      // Parse "{28.7,28.3,29.2}" into ["28.7","28.3","29.2"]
+      if (s.startsWith("{") && s.endsWith("}")) {
+        const inner = s.slice(1, -1).trim();
+        if (!inner) continue;
+        inner
+          .split(",")
+          .map((p) => p.replace(/^"+|"+$/g, "").trim())
+          .filter(Boolean)
+          .forEach((p) => out.push(p));
+      } else {
+        out.push(s);
+      }
+    }
+  
+    return out;
+  }
+
+  function formatPrettyDate(ymd: string) {
+    const d = new Date(ymd + "T00:00:00"); // prevent timezone shift
+    if (isNaN(d.getTime())) return ymd;
+
+    const month = d.toLocaleString(undefined, { month: "long" });
+    const dd = d.getDate();
+    const year = d.getFullYear();
+
+    function ordinal(n: number) {
+      if (n % 100 >= 11 && n % 100 <= 13) return `${n}th`;
+      switch (n % 10) {
+        case 1:
+          return `${n}st`;
+        case 2:
+          return `${n}nd`;
+        case 3:
+          return `${n}rd`;
+        default:
+          return `${n}th`;
+      }
+    }
+
+    return `${month} ${ordinal(dd)}, ${year}`;
+  }
 
   return (
     <FormScreen
@@ -376,7 +458,7 @@ export default function HomeScreen() {
         }}
       >
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>Featured exercise</Text>
+          <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>Featured Exercise</Text>
 
           <Pressable onPress={() => setPickerOpen(true)}>
             <Text style={{ fontWeight: "800", color: c.text }}>
@@ -417,7 +499,7 @@ export default function HomeScreen() {
                       gap: 6,
                     }}
                   >
-                    <Text style={{ fontWeight: "800", color: c.text }}>{date}</Text>
+                    <Text style={{ fontWeight: "800", color: c.text }}>{date ? formatPrettyDate(date) : "-"}</Text>
 
                     {isLift ? (
                       (r.lift_reps ?? []).map((rep: number | null, i: number) => {
@@ -431,17 +513,17 @@ export default function HomeScreen() {
                       })
                     ) : (
                       (() => {
-                        const flatTimes: string[] =
-                          Array.isArray(r.set_times) && r.set_times.length
-                            ? r.set_times
-                            : Array.isArray(r.times) && r.times.length
-                            ? r.times
+                        const flatTimes =
+                          normalizeTimes(r.set_times).length
+                            ? normalizeTimes(r.set_times)
+                            : normalizeTimes(r.times).length
+                            ? normalizeTimes(r.times)
                             : [];
                     
                         if (flatTimes.length) {
                           return (
                             <Text style={{ color: c.subtext }} numberOfLines={3}>
-                              Times: {flatTimes.filter((t: string) => t?.trim()).join(" • ")}
+                              Times: {flatTimes.join(" • ")}
                             </Text>
                           );
                         }
