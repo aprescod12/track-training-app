@@ -4,7 +4,6 @@ import { Stack, router, useLocalSearchParams } from "expo-router";
 import PrimaryButton from "../../components/PrimaryButton";
 import { supabase } from "../../lib/supabase";
 import { ensureNotifPermission, scheduleEventReminder } from "../../lib/notifications";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppColors } from "../../lib/theme";
 import FormScreen from "../../components/FormScreen";
 
@@ -128,13 +127,22 @@ export default function AddEventScreen() {
 
   return (
     <FormScreen contentContainerStyle={{ paddingBottom: 28 }}>
-    <Stack.Screen options={{ title: "Add Event" }} />
 
-    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-      <Pressable onPress={() => router.back()} style={{ paddingVertical: 8, paddingRight: 8 }}>
-        <Text style={{ fontWeight: "800", color: c.text }}>← Back</Text>
-      </Pressable>
-    </View>
+        <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+          <Pressable
+            onPress={() => router.back()}
+            style={{
+              borderWidth: 1,
+              borderColor: c.border,
+              borderRadius: 999,
+              paddingVertical: 6,
+              paddingHorizontal: 14,
+              backgroundColor: c.card,
+            }}
+          >
+            <Text style={{ fontWeight: "600", color: c.text }}>Cancel</Text>
+          </Pressable>
+        </View>
 
           <View style={{ gap: 6 }}>
             <Text style={labelStyle}>Title</Text>

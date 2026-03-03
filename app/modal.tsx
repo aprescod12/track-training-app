@@ -39,6 +39,52 @@ type EntryDraft = {
   weight: string;
 };
 
+function buildEntrySetsFromTrack(entryId: string, setTimes: string[][] | null) {
+  if (!setTimes || !Array.isArray(setTimes)) return [];
+
+  const rows: any[] = [];
+  for (let s = 0; s < setTimes.length; s++) {
+    const repTimes = setTimes[s] ?? [];
+    for (let r = 0; r < repTimes.length; r++) {
+      const t = (repTimes[r] ?? "").trim();
+      if (!t) continue;
+      rows.push({
+        entry_id: entryId,
+        set_number: s + 1,
+        rep_number: r + 1,
+        time_text: t,
+      });
+    }
+  }
+  return rows;
+}
+
+// NOTE: we set rep_number = 1 for lift rows to avoid the UNIQUE constraint
+// allowing duplicates when rep_number is null.
+function buildEntrySetsFromLift(entryId: string, liftReps: (number | null)[] | null, liftWeights: (number | null)[] | null) {
+  const repsArr = Array.isArray(liftReps) ? liftReps : [];
+  const wArr = Array.isArray(liftWeights) ? liftWeights : [];
+
+  const n = Math.max(repsArr.length, wArr.length);
+  const rows: any[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const reps = repsArr[i] ?? null;
+    const weight = wArr[i] ?? null;
+    if (reps == null && weight == null) continue;
+
+    rows.push({
+      entry_id: entryId,
+      set_number: i + 1,
+      rep_number: 1,
+      reps,
+      weight,
+    });
+  }
+
+  return rows;
+}
+
 function toPosInt(s: string) {
   const n = parseInt(s, 10);
   return Number.isFinite(n) && n > 0 ? n : 0;
@@ -330,8 +376,31 @@ export default function ModalScreen() {
           });
         }
 
-        const { error: eErr } = await supabase.from("workout_entries").insert(payload);
-        if (eErr) throw eErr;
+        const { data: insertedEntries, error: eErr } = await supabase
+  .from("workout_entries")
+  .insert(payload)
+  .select("id, set_times, lift_reps, lift_weights");
+
+if (eErr) throw eErr;
+
+const allSetRows: any[] = [];
+
+for (const row of insertedEntries ?? []) {
+  if (workoutType === "lift") {
+    allSetRows.push(...buildEntrySetsFromLift(row.id, row.lift_reps, row.lift_weights));
+  } else {
+    allSetRows.push(...buildEntrySetsFromTrack(row.id, row.set_times));
+  }
+}
+
+if (allSetRows.length) {
+  const { error: sErr } = await supabase.from("entry_sets").insert(allSetRows);
+  if (sErr) {
+    // rollback: delete workout (cascades entries + sets)
+    await supabase.from("workouts").delete().eq("id", workout.id);
+    throw sErr;
+  }
+}
       }
 
       showToast("Workout saved ✅");

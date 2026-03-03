@@ -6,7 +6,6 @@ import { formatYMD } from "../../lib/date";
 import PrimaryButton from "../../components/PrimaryButton";
 import { useAppColors } from "../../lib/theme";
 import FormScreen from "../../components/FormScreen";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 type Entry = {
   id: string;
@@ -54,10 +53,7 @@ export default function HomeScreen() {
   const [weekWorkouts, setWeekWorkouts] = useState<Workout[]>([]);
 
   const weekStart = useMemo(() => startOfWeekMonday(today), [today]);
-  const weekDays = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
-    [weekStart]
-  );
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
 
   const [weeklyStats, setWeeklyStats] = useState({
     totalDistanceM: 0,
@@ -84,19 +80,89 @@ export default function HomeScreen() {
     return map;
   }, [weekWorkouts]);
 
+  const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  const dotTrack = c.dark ? "#34D399" : "green";
+  const dotLift = c.dark ? "#60A5FA" : "blue";
+
+  function formatPrettyDate(ymd: string) {
+    const d = new Date(ymd + "T00:00:00"); // prevent timezone shift
+    if (isNaN(d.getTime())) return ymd;
+
+    const month = d.toLocaleString(undefined, { month: "long" });
+    const dd = d.getDate();
+    const year = d.getFullYear();
+
+    function ordinal(n: number) {
+      if (n % 100 >= 11 && n % 100 <= 13) return `${n}th`;
+      switch (n % 10) {
+        case 1:
+          return `${n}st`;
+        case 2:
+          return `${n}nd`;
+        case 3:
+          return `${n}rd`;
+        default:
+          return `${n}th`;
+      }
+    }
+
+    return `${month} ${ordinal(dd)}, ${year}`;
+  }
+
+  const loadFeatured = useCallback(async (exercise_id: string) => {
+    const { data, error } = await supabase
+      .from("workout_entries")
+      .select(
+        `
+        id,
+        workouts(workout_date, workout_type),
+        exercises(name),
+        entry_sets(set_number, rep_number, time_text, reps, weight)
+      `
+      )
+      .eq("exercise_id", exercise_id)
+      .order("workout_date", { ascending: false, foreignTable: "workouts" }) // ✅ keep this
+      .order("set_number", { ascending: true, foreignTable: "entry_sets" })
+      .order("rep_number", { ascending: true, foreignTable: "entry_sets" })
+      .limit(12);
+
+    if (error) {
+      console.log("loadFeatured error:", error);
+      setFeaturedRows([]);
+      return;
+    }
+
+    setFeaturedRows((data as any) ?? []);
+  }, []);
+
+  const clearFeatured = useCallback(async () => {
+    setFeaturedExercise(null);
+    setFeaturedRows([]);
+
+    const { data: userRes } = await supabase.auth.getUser();
+    const uid = userRes.user?.id;
+
+    if (uid) {
+      const { error } = await supabase.from("profiles").update({ featured_exercise_id: null }).eq("id", uid);
+      if (error) console.log("clear featured_exercise_id error:", error);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setStatus("Loading...");
 
+    // --- get user once ---
+    const { data: userRes, error: userErr } = await supabase.auth.getUser();
+    if (userErr) console.log("getUser error:", userErr);
+    const user = userRes.user ?? null;
+    const uid = user?.id ?? null;
+
     // 1) Welcome label
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-    
-      const fullName = user?.user_metadata?.full_name?.trim();
-    
+      const fullName = (user?.user_metadata as any)?.full_name?.trim?.();
       if (fullName) {
-        const firstName = fullName.split(" ")[0];
+        const firstName = String(fullName).split(" ")[0];
         setUserLabel(`Welcome, ${firstName}`);
       } else if (user?.email) {
         const fallback = user.email.split("@")[0];
@@ -152,7 +218,7 @@ export default function HomeScreen() {
     const trackWorkouts = weekRows.filter((w: any) => w.workout_type === "track").length;
     const liftWorkouts = weekRows.filter((w: any) => w.workout_type === "lift").length;
 
-    // 4) Weekly distance + lift sets (using entries joined to workouts)
+    // 4) Weekly distance + lift sets
     const { data: distRows, error: distErr } = await supabase
       .from("workout_entries")
       .select(`reps, sets, exercises(distance_m), workouts!inner(workout_date, workout_type)`)
@@ -180,15 +246,64 @@ export default function HomeScreen() {
     setWeeklyStats({ totalDistanceM, trackWorkouts, liftWorkouts, liftSets });
 
     // 5) Exercise list for picker
-    const { data: exData } = await supabase
+    const { data: exData, error: exErr } = await supabase
       .from("exercises")
       .select("exercise_id, name")
       .order("name", { ascending: true });
 
-    setAllExercises((exData as any) ?? []);
+    if (exErr) {
+      setAllExercises([]);
+      setStatus("Error: " + exErr.message);
+      return;
+    }
+
+    const exList = (exData as any) ?? [];
+    setAllExercises(exList);
+
+    // 6) Restore featured exercise from profile (use LOCAL variable — no state race)
+    let featuredId: string | null = null;
+    if (uid) {
+      const { data: prof, error: pErr } = await supabase
+        .from("profiles")
+        .select("featured_exercise_id")
+        .eq("id", uid)
+        .maybeSingle();
+
+      if (pErr) console.log("profile fetch error:", pErr);
+      featuredId = (prof as any)?.featured_exercise_id ?? null;
+    }
+
+    if (featuredId) {
+      const found = exList.find((x: any) => x.exercise_id === featuredId);
+
+      if (found) {
+        setFeaturedExercise(found);
+        await loadFeatured(featuredId);
+      } else {
+        // fallback if not in list
+        const { data: one, error: oneErr } = await supabase
+          .from("exercises")
+          .select("exercise_id, name")
+          .eq("exercise_id", featuredId)
+          .maybeSingle();
+
+        if (oneErr) console.log("exercise fallback fetch error:", oneErr);
+
+        if (one) {
+          setFeaturedExercise(one as any);
+          await loadFeatured(featuredId);
+        } else {
+          setFeaturedExercise(null);
+          setFeaturedRows([]);
+        }
+      }
+    } else {
+      setFeaturedExercise(null);
+      setFeaturedRows([]);
+    }
 
     setStatus("Loaded ✅");
-  }, [todayKey, weekStart]);
+  }, [todayKey, weekStart, loadFeatured]);
 
   useFocusEffect(
     useCallback(() => {
@@ -201,107 +316,6 @@ export default function HomeScreen() {
     await load();
     setRefreshing(false);
   }, [load]);
-
-  const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-  async function loadFeatured(exercise_id: string) {
-    const { data, error } = await supabase
-      .from("workout_entries")
-      .select(`
-        id,
-        created_at,
-        time,
-        times,
-        set_times,
-        lift_reps,
-        lift_weights,
-        workouts(workout_date, workout_type),
-        exercises(name)
-      `)
-      .eq("exercise_id", exercise_id)
-      .order("workout_date", { ascending: false, foreignTable: "workouts" })
-      .order("created_at", { ascending: false })
-      .limit(12);
-  
-    if (error) {
-      console.log("loadFeatured error:", error);
-      setFeaturedRows([]);
-      return;
-    }
-  
-    setFeaturedRows((data as any) ?? []);
-  }
-
-  const dotTrack = c.dark ? "#34D399" : "green";
-  const dotLift = c.dark ? "#60A5FA" : "blue";
-
-  function normalizeTimes(x: any): string[] {
-    if (x == null) return [];
-  
-    // If it's already a string, treat as one time
-    if (typeof x === "string") return [x];
-  
-    if (!Array.isArray(x)) return [];
-  
-    // Case A: nested arrays (e.g., [["28.7","28.3"]])
-    if (Array.isArray(x[0])) {
-      return x
-        .flat()
-        .map((t: any) => String(t))
-        .map((t) => t.trim())
-        .filter(Boolean);
-    }
-  
-    // Case B: flat array of strings (e.g., ["28.7","28.3"])
-    // OR Postgres array-as-string inside a text[] slot (e.g., ["{28.7,28.3}"])
-    const out: string[] = [];
-    for (const item of x) {
-      if (item == null) continue;
-  
-      const s = String(item).trim();
-      if (!s) continue;
-  
-      // Parse "{28.7,28.3,29.2}" into ["28.7","28.3","29.2"]
-      if (s.startsWith("{") && s.endsWith("}")) {
-        const inner = s.slice(1, -1).trim();
-        if (!inner) continue;
-        inner
-          .split(",")
-          .map((p) => p.replace(/^"+|"+$/g, "").trim())
-          .filter(Boolean)
-          .forEach((p) => out.push(p));
-      } else {
-        out.push(s);
-      }
-    }
-  
-    return out;
-  }
-
-  function formatPrettyDate(ymd: string) {
-    const d = new Date(ymd + "T00:00:00"); // prevent timezone shift
-    if (isNaN(d.getTime())) return ymd;
-
-    const month = d.toLocaleString(undefined, { month: "long" });
-    const dd = d.getDate();
-    const year = d.getFullYear();
-
-    function ordinal(n: number) {
-      if (n % 100 >= 11 && n % 100 <= 13) return `${n}th`;
-      switch (n % 10) {
-        case 1:
-          return `${n}st`;
-        case 2:
-          return `${n}nd`;
-        case 3:
-          return `${n}rd`;
-        default:
-          return `${n}th`;
-      }
-    }
-
-    return `${month} ${ordinal(dd)}, ${year}`;
-  }
 
   return (
     <FormScreen
@@ -357,9 +371,7 @@ export default function HomeScreen() {
                     gap: 6,
                   }}
                 >
-                  <Text style={{ fontWeight: "700", color: c.text }}>
-                    {e.exercises?.name ?? e.exercise ?? "Entry"}
-                  </Text>
+                  <Text style={{ fontWeight: "700", color: c.text }}>{e.exercises?.name ?? e.exercise ?? "Entry"}</Text>
                   {!!e.reps && <Text style={{ color: c.subtext }}>Reps: {e.reps}</Text>}
                   {!!e.time && <Text style={{ color: c.subtext }}>Time: {e.time}</Text>}
                   {e.weight !== null && <Text style={{ color: c.subtext }}>Weight: {e.weight}</Text>}
@@ -439,9 +451,7 @@ export default function HomeScreen() {
             }}
           >
             <Text style={{ color: c.subtext }}>Lifts</Text>
-            <Text style={{ fontSize: 18, fontWeight: "900", color: c.text }}>
-              {weeklyStats.liftWorkouts}
-            </Text>
+            <Text style={{ fontSize: 18, fontWeight: "900", color: c.text }}>{weeklyStats.liftWorkouts}</Text>
           </View>
         </View>
       </View>
@@ -461,24 +471,18 @@ export default function HomeScreen() {
           <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>Featured Exercise</Text>
 
           <Pressable onPress={() => setPickerOpen(true)}>
-            <Text style={{ fontWeight: "800", color: c.text }}>
-              {featuredExercise ? "Change" : "Choose"}
-            </Text>
+            <Text style={{ fontWeight: "800", color: c.text }}>{featuredExercise ? "Change" : "Choose"}</Text>
           </Pressable>
         </View>
 
         {!featuredExercise ? (
-          <Text style={{ color: c.subtext }}>
-            Choose an exercise to see recent performances. (Optional)
-          </Text>
+          <Text style={{ color: c.subtext }}>Choose an exercise to see recent performances. (Optional)</Text>
         ) : (
           <>
             <Text style={{ fontWeight: "900", color: c.text }}>{featuredExercise.name}</Text>
 
             {featuredRows.length === 0 ? (
-              <Text style={{ color: c.subtext }}>
-                No recent entries for this exercise yet.
-              </Text>
+              <Text style={{ color: c.subtext }}>No recent entries for this exercise yet.</Text>
             ) : null}
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
@@ -501,53 +505,72 @@ export default function HomeScreen() {
                   >
                     <Text style={{ fontWeight: "800", color: c.text }}>{date ? formatPrettyDate(date) : "-"}</Text>
 
-                    {isLift ? (
-                      (r.lift_reps ?? []).map((rep: number | null, i: number) => {
-                        const w = r.lift_weights?.[i] ?? null;
-                        if (rep == null && w == null) return null;
-                        return (
-                          <Text key={i} style={{ color: c.subtext }} numberOfLines={2}>
-                            Set {i + 1}: {rep ?? "—"} reps {w != null ? `@ ${w}` : ""}
-                          </Text>
-                        );
-                      })
-                    ) : (
-                      (() => {
-                        const flatTimes =
-                          normalizeTimes(r.set_times).length
-                            ? normalizeTimes(r.set_times)
-                            : normalizeTimes(r.times).length
-                            ? normalizeTimes(r.times)
-                            : [];
-                    
-                        if (flatTimes.length) {
+                    {(() => {
+                      const sets = (r.entry_sets ?? []) as Array<{
+                        set_number: number;
+                        rep_number: number | null;
+                        time_text: string | null;
+                        reps: number | null;
+                        weight: number | null;
+                      }>;
+
+                      if (!sets.length) {
+                        return <Text style={{ color: c.subtext }}>No sets recorded.</Text>;
+                      }
+
+                      const bySet: Record<number, typeof sets> = {};
+                      for (const s of sets) {
+                        const k = Number(s.set_number);
+                        if (!bySet[k]) bySet[k] = [];
+                        bySet[k].push(s);
+                      }
+
+                      const setNums = Object.keys(bySet)
+                        .map(Number)
+                        .sort((a, b) => a - b);
+
+                      if (isLift) {
+                        return setNums.map((setNum) => {
+                          const row = bySet[setNum]?.[0];
+                          if (!row) return null;
+                          const reps = row.reps ?? "—";
+                          const w = row.weight != null ? String(row.weight) : "";
                           return (
-                            <Text style={{ color: c.subtext }} numberOfLines={3}>
-                              Times: {flatTimes.join(" • ")}
+                            <Text key={setNum} style={{ color: c.subtext }} numberOfLines={2}>
+                              Set {setNum}: {reps} reps {w ? `@ ${w}` : ""}
                             </Text>
                           );
-                        }
-                    
-                        if (r.time) {
-                          return <Text style={{ color: c.subtext }}>Time: {r.time}</Text>;
-                        }
-                    
-                        return <Text style={{ color: c.subtext }}>No times recorded.</Text>;
-                      })()
-                    )}
+                        });
+                      }
+
+                      return setNums.map((setNum) => {
+                        const times = (bySet[setNum] ?? [])
+                          .map((x) => (x.time_text ?? "").trim())
+                          .filter(Boolean);
+
+                        if (!times.length) return null;
+
+                        return (
+                          <Text key={setNum} style={{ color: c.subtext }} numberOfLines={2}>
+                            Set {setNum}: {times.join(" • ")}
+                          </Text>
+                        );
+                      });
+                    })()}
                   </View>
                 );
               })}
             </ScrollView>
 
-            <Pressable
-              onPress={() => {
-                setFeaturedExercise(null);
-                setFeaturedRows([]);
-              }}
-            >
-              <Text style={{ color: c.subtext, fontWeight: "800" }}>Remove featured exercise</Text>
-            </Pressable>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Pressable onPress={clearFeatured}>
+                <Text style={{ color: c.subtext, fontWeight: "800" }}>Remove featured exercise</Text>
+              </Pressable>
+
+              <Pressable onPress={() => router.push(`/history/${featuredExercise.exercise_id}`)}>
+                <Text style={{ color: c.subtext, fontWeight: "800" }}>History</Text>
+              </Pressable>
+            </View>
           </>
         )}
       </View>
@@ -572,10 +595,7 @@ export default function HomeScreen() {
 
         <View style={{ flexDirection: "row" }}>
           {weekdayLabels.map((w) => (
-            <Text
-              key={w}
-              style={{ width: `${100 / 7}%`, textAlign: "center", fontSize: 12, color: c.subtext }}
-            >
+            <Text key={w} style={{ width: `${100 / 7}%`, textAlign: "center", fontSize: 12, color: c.subtext }}>
               {w}
             </Text>
           ))}
@@ -693,10 +713,9 @@ export default function HomeScreen() {
 
             <ScrollView contentContainerStyle={{ gap: 8 }}>
               <Pressable
-                onPress={() => {
-                  setFeaturedExercise(null);
-                  setFeaturedRows([]);
+                onPress={async () => {
                   setPickerOpen(false);
+                  await clearFeatured(); // ✅ clears UI + DB
                 }}
                 style={{
                   borderWidth: 1,
@@ -716,6 +735,18 @@ export default function HomeScreen() {
                     setFeaturedExercise(ex);
                     setPickerOpen(false);
                     await loadFeatured(ex.exercise_id);
+
+                    const { data: userRes } = await supabase.auth.getUser();
+                    const uid = userRes.user?.id;
+
+                    if (uid) {
+                      const { error } = await supabase
+                        .from("profiles")
+                        .update({ featured_exercise_id: ex.exercise_id })
+                        .eq("id", uid);
+
+                      if (error) console.log("save featured_exercise_id error:", error);
+                    }
                   }}
                   style={{
                     borderWidth: 1,

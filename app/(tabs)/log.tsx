@@ -6,7 +6,6 @@ import { supabase } from "../../lib/supabase";
 import { formatYMD } from "../../lib/date";
 import FormScreen from "../../components/FormScreen";
 import { useAppColors } from "../../lib/theme";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 type Workout = {
   id: string;

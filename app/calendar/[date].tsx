@@ -12,7 +12,6 @@ import FormScreen from "../../components/FormScreen";
 import { supabase } from "../../lib/supabase";
 import PrimaryButton from "../../components/PrimaryButton";
 import { useAppColors } from "../../lib/theme";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 type Entry = {
   id: string;

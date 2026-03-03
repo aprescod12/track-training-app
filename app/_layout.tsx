@@ -15,7 +15,7 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: c.bg }, // ✅ important for dark mode behind screens
         }}
       >
-        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="back" />
 
         <Stack.Screen
           name="modal"
@@ -36,7 +36,7 @@ export default function RootLayout() {
             title: "Login",
             headerStyle: { backgroundColor: c.bg },
             headerTintColor: c.text,
-            headerShadowVisible: false, // optional: cleaner look
+            headerShadowVisible: false,
             contentStyle: { backgroundColor: c.bg },
           }}
         />
@@ -49,6 +49,31 @@ export default function RootLayout() {
             headerStyle: { backgroundColor: c.bg },
             headerTintColor: c.text,
             headerShadowVisible: false,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
+
+        {/* ✅ Non-tab History screen */}
+        <Stack.Screen
+          name="history/[exerciseId]"
+          options={{
+            presentation: "modal",
+            title: "History",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
+
+        <Stack.Screen
+          name="calendar/add-event"
+          options={{
+            presentation: "modal",
+            title: "Add Event",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
             contentStyle: { backgroundColor: c.bg },
           }}
         />
