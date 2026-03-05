@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
 import { View, Text, Pressable, ActivityIndicator, Alert } from "react-native";
 import { useFocusEffect, router } from "expo-router";
-import { supabase } from "../../lib/supabase";
-import FormScreen from "../../components/FormScreen";
-import { useAppColors } from "../../lib/theme";
+import { supabase } from "../../../lib/supabase";
+import FormScreen from "../../../components/FormScreen";
+import { useAppColors } from "../../../lib/theme";
 
 type FriendshipRow = {
   user_low: string;

@@ -165,7 +165,7 @@ export default function FriendsTab() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.push("/friends/workouts")}
+            onPress={() => router.push("/friends/workouts/index")}
             style={{ ...button, flex: 1 }}
           >
             <Text style={{ color: c.text, fontWeight: "800" }}>Workouts</Text>
