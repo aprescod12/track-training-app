@@ -1,12 +1,5 @@
 import { useCallback, useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  useWindowDimensions,
-} from "react-native";
+import { View, Text, ScrollView, Pressable, ActivityIndicator, useWindowDimensions } from "react-native";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import FormScreen from "../../components/FormScreen";
 import { supabase } from "../../lib/supabase";
@@ -47,6 +40,16 @@ export default function CalendarDayScreen() {
     setLoading(true);
     setStatus("Loading...");
 
+    const { data: userRes, error: userErr } = await supabase.auth.getUser();
+    const uid = userRes.user?.id ?? null;
+
+    if (userErr || !uid) {
+      setStatus("Not logged in");
+      setWorkouts([]);
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("workouts")
       .select(
@@ -64,6 +67,7 @@ export default function CalendarDayScreen() {
         )
       `
       )
+      .eq("user_id", uid) // ✅ CRITICAL FIX
       .eq("workout_date", day)
       .order("created_at", { ascending: false });
 
@@ -89,7 +93,7 @@ export default function CalendarDayScreen() {
   const cardMaxWidth = isWide ? 560 : undefined;
 
   function formatPrettyDate(ymd: string) {
-    const d = new Date(ymd + "T00:00:00"); // prevent timezone shift
+    const d = new Date(ymd + "T00:00:00");
     if (isNaN(d.getTime())) return ymd;
 
     const month = d.toLocaleString(undefined, { month: "long" });

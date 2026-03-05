@@ -25,9 +25,20 @@ export default function WorkoutsScreen() {
 
   const load = useCallback(async () => {
     setStatus("Loading...");
+
+    const { data: userRes, error: userErr } = await supabase.auth.getUser();
+    const uid = userRes.user?.id ?? null;
+
+    if (userErr || !uid) {
+      setStatus("Not logged in");
+      setItems([]);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("workouts")
       .select("id, workout_date, title, notes")
+      .eq("user_id", uid) // ✅ CRITICAL FIX
       .order("workout_date", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(30);
@@ -38,7 +49,7 @@ export default function WorkoutsScreen() {
       return;
     }
 
-    setItems(data ?? []);
+    setItems((data ?? []) as Workout[]);
     setStatus((data?.length ?? 0) ? "Loaded ✅" : "No workouts yet");
   }, []);
 

@@ -6,6 +6,14 @@ import { supabase } from "../../lib/supabase";
 import FormScreen from "../../components/FormScreen";
 import { useAppColors } from "../../lib/theme";
 
+type EntrySetRow = {
+  set_number: number;
+  rep_number: number | null;
+  time_text: string | null;
+  reps: number | null;
+  weight: number | null;
+};
+
 type Entry = {
   id: string;
   exercise_id: string | null;
@@ -18,6 +26,9 @@ type Entry = {
   lift_reps: (number | null)[] | null;
   lift_weights: (number | null)[] | null;
   weight: number | null;
+
+  // normalized set storage
+  entry_sets?: EntrySetRow[] | null;
 };
 
 type Workout = {
@@ -26,6 +37,24 @@ type Workout = {
   title: string;
   notes: string | null;
   workout_entries: Entry[];
+};
+
+type ExercisePRRow = {
+  user_id: string;
+  exercise_id: string;
+
+  best_time_sec: number | null;
+  best_time_text: string | null;
+  best_time_entry_id: string | null;
+  best_time_set_number: number | null;
+  best_time_rep_number: number | null;
+
+  best_weight: number | null;
+  best_reps: number | null;
+  best_weight_entry_id: string | null;
+  best_weight_set_number: number | null;
+
+  updated_at: string;
 };
 
 function fmtNum(n: number | null | undefined) {
@@ -48,6 +77,9 @@ export default function WorkoutDetail() {
   const [status, setStatus] = useState("Loading...");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // ✅ PR pill per entry id (now sourced from exercise_prs)
+  const [prByEntryId, setPrByEntryId] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     if (!workoutId) return;
@@ -72,7 +104,8 @@ export default function WorkoutDetail() {
           lift_reps,
           lift_weights,
           weight,
-          notes
+          notes,
+          entry_sets(set_number, rep_number, time_text, reps, weight)
         )
       `
       )
@@ -94,6 +127,70 @@ export default function WorkoutDetail() {
   }, [load]);
 
   const entries = useMemo(() => item?.workout_entries ?? [], [item]);
+
+  // ✅ Pull PR pointers from exercise_prs and mark entries in THIS workout that match.
+  const loadPRBadgesFromDB = useCallback(async () => {
+    if (!item) return;
+
+    if (!entries.length) {
+      setPrByEntryId({});
+      return;
+    }
+
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    if (userErr) {
+      console.log("auth.getUser error:", userErr);
+      setPrByEntryId({});
+      return;
+    }
+    const uid = userData.user?.id;
+    if (!uid) {
+      setPrByEntryId({});
+      return;
+    }
+
+    const exerciseIds = Array.from(
+      new Set(entries.map((e) => e.exercise_id).filter((x): x is string => !!x))
+    );
+
+    if (!exerciseIds.length) {
+      setPrByEntryId({});
+      return;
+    }
+
+    const { data: prs, error: prErr } = await supabase
+      .from("exercise_prs")
+      .select("exercise_id, best_time_entry_id, best_weight_entry_id")
+      .eq("user_id", uid)
+      .in("exercise_id", exerciseIds);
+
+    if (prErr) {
+      console.log("exercise_prs load error:", prErr);
+      setPrByEntryId({});
+      return;
+    }
+
+    // Build a set of entry_ids that are current PR holders
+    const prEntryIds = new Set<string>();
+    for (const r of (prs as any[]) ?? []) {
+      const t = r.best_time_entry_id as string | null;
+      const w = r.best_weight_entry_id as string | null;
+      if (t) prEntryIds.add(t);
+      if (w) prEntryIds.add(w);
+    }
+
+    const next: Record<string, boolean> = {};
+    for (const e of entries) {
+      if (prEntryIds.has(e.id)) next[e.id] = true;
+    }
+
+    setPrByEntryId(next);
+  }, [item, entries]);
+
+  useEffect(() => {
+    if (item) loadPRBadgesFromDB();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item]);
 
   return (
     <>
@@ -130,6 +227,8 @@ export default function WorkoutDetail() {
                 const isLiftEntry = Array.isArray(e.lift_reps) || Array.isArray(e.lift_weights);
                 const isTrackEntry = e.set_times !== undefined || e.reps !== undefined;
 
+                const showPR = !!prByEntryId[e.id];
+
                 return (
                   <View
                     key={e.id}
@@ -142,9 +241,59 @@ export default function WorkoutDetail() {
                       gap: 6,
                     }}
                   >
-                    <Text style={{ fontWeight: "700", color: c.text }}>
-                      {e.exercises?.name ?? e.exercise ?? "Entry"}
-                    </Text>
+                    <View
+                      style={{
+                        position: "relative",
+                        paddingRight: 120, // leave space so the title doesn’t run under buttons
+                        minHeight: 34, // stable top area
+                      }}
+                    >
+                      <Text style={{ fontWeight: "700", color: c.text }}>
+                        {e.exercises?.name ?? e.exercise ?? "Entry"}
+                      </Text>
+
+                      {/* Right stack: absolute so layout doesn't jump */}
+                      <View
+                        style={{
+                          position: "absolute",
+                          right: 0,
+                          top: 0,
+                          alignItems: "flex-end",
+                          gap: 8,
+                        }}
+                      >
+                        {e.exercise_id ? (
+                          <Pressable
+                            onPress={() => router.push(`/history/${e.exercise_id}`)}
+                            style={{
+                              borderWidth: 1,
+                              borderColor: c.border,
+                              borderRadius: 999,
+                              paddingVertical: 6,
+                              paddingHorizontal: 14,
+                              backgroundColor: c.bg,
+                            }}
+                          >
+                            <Text style={{ fontWeight: "600", color: c.text }}>History</Text>
+                          </Pressable>
+                        ) : null}
+
+                        {showPR ? (
+                          <View
+                            style={{
+                              borderWidth: 1,
+                              borderColor: c.border,
+                              borderRadius: 999,
+                              paddingVertical: 4,
+                              paddingHorizontal: 10,
+                              backgroundColor: c.bg,
+                            }}
+                          >
+                            <Text style={{ fontWeight: "900", fontSize: 12, color: c.text }}>🏆 PR</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
 
                     {e.sets !== null && <Text style={{ color: c.subtext }}>Sets: {e.sets}</Text>}
 

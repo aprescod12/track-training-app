@@ -15,6 +15,7 @@ import { supabase } from "../lib/supabase";
 import { formatYMD } from "../lib/date";
 import { getOrCreateExerciseId } from "../lib/exercises";
 import { useAppColors } from "../lib/theme";
+import { computeNewPRsForWorkout, upsertExercisePRs } from "../lib/pr";
 
 type ToastState = { open: boolean; message: string };
 
@@ -196,6 +197,64 @@ export default function ModalScreen() {
     ]).start(() => setToast((t) => ({ ...t, open: false })));
   };
 
+    // --- PR banner animation (top) ---
+    const [prBanner, setPrBanner] = useState<{ open: boolean; message: string }>({
+      open: false,
+      message: "",
+    });
+  
+    const prTranslateY = useRef(new Animated.Value(-60)).current;
+    const prOpacity = useRef(new Animated.Value(0)).current;
+  
+    const showPRBanner = (message: string) => {
+      setPRBannerSafe(true, message);
+    };
+  
+    const setPRBannerSafe = (open: boolean, message: string) => {
+      setPrBanner({ open, message });
+      if (open) {
+        prTranslateY.setValue(-60);
+        prOpacity.setValue(0);
+  
+        Animated.parallel([
+          Animated.timing(prOpacity, {
+            toValue: 1,
+            duration: 180,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(prTranslateY, {
+            toValue: 0,
+            duration: 260,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]).start();
+  
+        // auto-hide after a moment
+        setTimeout(() => {
+          hidePRBanner();
+        }, 1200);
+      }
+    };
+  
+    const hidePRBanner = () => {
+      Animated.parallel([
+        Animated.timing(prOpacity, {
+          toValue: 0,
+          duration: 160,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(prTranslateY, {
+          toValue: -60,
+          duration: 200,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start(() => setPrBanner({ open: false, message: "" }));
+    };
+
   useEffect(() => {
     if (!toast.open) return;
     const t = setTimeout(() => {
@@ -362,8 +421,9 @@ export default function ModalScreen() {
         })
         .filter((row) => row.exercise);
 
+      // Insert workout_entries + entry_sets (normalized)
       if (cleanedEntries.length) {
-        const payload = [];
+        const payload: any[] = [];
 
         for (const e of cleanedEntries) {
           const exId = await getOrCreateExerciseId(e.exercise ?? "");
@@ -377,33 +437,53 @@ export default function ModalScreen() {
         }
 
         const { data: insertedEntries, error: eErr } = await supabase
-  .from("workout_entries")
-  .insert(payload)
-  .select("id, set_times, lift_reps, lift_weights");
+          .from("workout_entries")
+          .insert(payload)
+          .select("id, set_times, lift_reps, lift_weights");
 
-if (eErr) throw eErr;
+        if (eErr) throw eErr;
 
-const allSetRows: any[] = [];
+        const allSetRows: any[] = [];
 
-for (const row of insertedEntries ?? []) {
-  if (workoutType === "lift") {
-    allSetRows.push(...buildEntrySetsFromLift(row.id, row.lift_reps, row.lift_weights));
-  } else {
-    allSetRows.push(...buildEntrySetsFromTrack(row.id, row.set_times));
-  }
-}
+        for (const row of insertedEntries ?? []) {
+          if (workoutType === "lift") {
+            allSetRows.push(...buildEntrySetsFromLift(row.id, row.lift_reps, row.lift_weights));
+          } else {
+            allSetRows.push(...buildEntrySetsFromTrack(row.id, row.set_times));
+          }
+        }
 
-if (allSetRows.length) {
-  const { error: sErr } = await supabase.from("entry_sets").insert(allSetRows);
-  if (sErr) {
-    // rollback: delete workout (cascades entries + sets)
-    await supabase.from("workouts").delete().eq("id", workout.id);
-    throw sErr;
-  }
-}
+        if (allSetRows.length) {
+          const { error: sErr } = await supabase.from("entry_sets").insert(allSetRows);
+          if (sErr) {
+            // rollback: delete workout (cascades entries + sets)
+            await supabase.from("workouts").delete().eq("id", workout.id);
+            throw sErr;
+          }
+        }
       }
 
-      showToast("Workout saved ✅");
+      // ✅ Option 4 then Option 3 (after DB writes succeed)
+      try {
+        const hits = await computeNewPRsForWorkout(workout.id);
+        await upsertExercisePRs(hits);
+
+        if (hits.length) {
+          const label =
+            hits.length === 1
+              ? `🏆 New PR: ${hits[0].exercise_name}`
+              : `🏆 ${hits.length} New PRs`;
+
+          // ✅ TOP celebration banner
+          showPRBanner(label);
+        }
+
+        // keep your normal bottom toast
+        showToast("Workout saved ✅");
+      } catch (err) {
+        console.log("PR compute/upsert error:", err);
+        showToast("Workout saved ✅");
+      }
     } catch (e: any) {
       setStatus(`Error: ${e?.message ?? String(e)}`);
     } finally {
@@ -727,6 +807,56 @@ if (allSetRows.length) {
 
         {!!status && <Text style={{ marginTop: 6, color: c.text }}>{status}</Text>}
       </FormScreen>
+
+      {prBanner.open && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 10,
+            left: 0,
+            right: 0,
+            paddingHorizontal: 16,
+          }}
+        >
+          <Animated.View
+            style={{
+              transform: [{ translateY: prTranslateY }],
+              opacity: prOpacity,
+              borderWidth: 1,
+              borderColor: c.border,
+              borderRadius: 18,
+              paddingVertical: 12,
+              paddingHorizontal: 14,
+              backgroundColor: c.card,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <View
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: c.bg,
+                }}
+              >
+                <Text style={{ fontWeight: "900", color: c.text }}>🏆</Text>
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: "900", color: c.text }}>New PR!</Text>
+                <Text style={{ color: c.subtext }} numberOfLines={1}>
+                  {prBanner.message}
+                </Text>
+              </View>
+            </View>
+          </Animated.View>
+        </View>
+      )}
 
       {toast.open && (
         <View

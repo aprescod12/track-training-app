@@ -110,7 +110,13 @@ export default function HomeScreen() {
     return `${month} ${ordinal(dd)}, ${year}`;
   }
 
-  const loadFeatured = useCallback(async (exercise_id: string) => {
+  // ✅ IMPORTANT: pass uid so featured only pulls *my* entries
+  const loadFeatured = useCallback(async (uid: string, exercise_id: string) => {
+    if (!uid || !exercise_id) {
+      setFeaturedRows([]);
+      return;
+    }
+  
     const { data, error } = await supabase
       .from("workout_entries")
       .select(
@@ -121,18 +127,19 @@ export default function HomeScreen() {
         entry_sets(set_number, rep_number, time_text, reps, weight)
       `
       )
+      .eq("user_id", uid) // ✅ my data only
       .eq("exercise_id", exercise_id)
-      .order("workout_date", { ascending: false, foreignTable: "workouts" }) // ✅ keep this
+      .order("workout_date", { ascending: false, foreignTable: "workouts" })
       .order("set_number", { ascending: true, foreignTable: "entry_sets" })
       .order("rep_number", { ascending: true, foreignTable: "entry_sets" })
       .limit(12);
-
+  
     if (error) {
       console.log("loadFeatured error:", error);
       setFeaturedRows([]);
       return;
     }
-
+  
     setFeaturedRows((data as any) ?? []);
   }, []);
 
@@ -158,6 +165,18 @@ export default function HomeScreen() {
     const user = userRes.user ?? null;
     const uid = user?.id ?? null;
 
+    // If not logged in, hard stop (prevents accidental cross-user UI)
+    if (!uid) {
+      setUserLabel("Welcome back");
+      setTodaysWorkout(null);
+      setWeekWorkouts([]);
+      setWeeklyStats({ totalDistanceM: 0, trackWorkouts: 0, liftWorkouts: 0, liftSets: 0 });
+      setFeaturedExercise(null);
+      setFeaturedRows([]);
+      setStatus("Not logged in");
+      return;
+    }
+
     // 1) Welcome label
     try {
       const fullName = (user?.user_metadata as any)?.full_name?.trim?.();
@@ -174,12 +193,13 @@ export default function HomeScreen() {
       setUserLabel("Welcome back");
     }
 
-    // 2) Today’s workout + entries
+    // 2) Today’s workout + entries (✅ my workouts only)
     const todayRes = await supabase
       .from("workouts")
       .select(
         `id, workout_date, title, notes, workout_type, workout_entries(id, exercise_id, exercises(name), exercise, reps, time, weight, notes)`
       )
+      .eq("user_id", uid) // ✅
       .eq("workout_date", todayKey)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -194,13 +214,14 @@ export default function HomeScreen() {
 
     setTodaysWorkout((todayRes.data as any) ?? null);
 
-    // 3) Week workouts
+    // 3) Week workouts (✅ my workouts only)
     const startKey = formatYMD(weekStart);
     const endKey = formatYMD(addDays(weekStart, 6));
 
     const weekRes = await supabase
       .from("workouts")
       .select("id, workout_date, title, notes, workout_type")
+      .eq("user_id", uid) // ✅
       .gte("workout_date", startKey)
       .lte("workout_date", endKey)
       .order("workout_date", { ascending: true })
@@ -218,10 +239,12 @@ export default function HomeScreen() {
     const trackWorkouts = weekRows.filter((w: any) => w.workout_type === "track").length;
     const liftWorkouts = weekRows.filter((w: any) => w.workout_type === "lift").length;
 
-    // 4) Weekly distance + lift sets
+    // 4) Weekly distance + lift sets (✅ my entries only via workouts.user_id)
     const { data: distRows, error: distErr } = await supabase
       .from("workout_entries")
-      .select(`reps, sets, exercises(distance_m), workouts!inner(workout_date, workout_type)`)
+      .select(`reps, sets, exercises(distance_m), workouts!inner(user_id, workout_date, workout_type)`)
+      .eq("user_id", uid)          // ✅ add this
+      .eq("workouts.user_id", uid) // ✅ keep this
       .gte("workouts.workout_date", startKey)
       .lte("workouts.workout_date", endKey);
 
@@ -245,7 +268,7 @@ export default function HomeScreen() {
 
     setWeeklyStats({ totalDistanceM, trackWorkouts, liftWorkouts, liftSets });
 
-    // 5) Exercise list for picker
+    // 5) Exercise list for picker (global list is fine)
     const { data: exData, error: exErr } = await supabase
       .from("exercises")
       .select("exercise_id, name")
@@ -260,27 +283,24 @@ export default function HomeScreen() {
     const exList = (exData as any) ?? [];
     setAllExercises(exList);
 
-    // 6) Restore featured exercise from profile (use LOCAL variable — no state race)
+    // 6) Restore featured exercise from profile
     let featuredId: string | null = null;
-    if (uid) {
-      const { data: prof, error: pErr } = await supabase
-        .from("profiles")
-        .select("featured_exercise_id")
-        .eq("id", uid)
-        .maybeSingle();
+    const { data: prof, error: pErr } = await supabase
+      .from("profiles")
+      .select("featured_exercise_id")
+      .eq("id", uid)
+      .maybeSingle();
 
-      if (pErr) console.log("profile fetch error:", pErr);
-      featuredId = (prof as any)?.featured_exercise_id ?? null;
-    }
+    if (pErr) console.log("profile fetch error:", pErr);
+    featuredId = (prof as any)?.featured_exercise_id ?? null;
 
     if (featuredId) {
       const found = exList.find((x: any) => x.exercise_id === featuredId);
 
       if (found) {
         setFeaturedExercise(found);
-        await loadFeatured(featuredId);
+        await loadFeatured(uid, featuredId); // ✅ pass uid
       } else {
-        // fallback if not in list
         const { data: one, error: oneErr } = await supabase
           .from("exercises")
           .select("exercise_id, name")
@@ -291,7 +311,7 @@ export default function HomeScreen() {
 
         if (one) {
           setFeaturedExercise(one as any);
-          await loadFeatured(featuredId);
+          await loadFeatured(uid, featuredId); // ✅ pass uid
         } else {
           setFeaturedExercise(null);
           setFeaturedRows([]);
@@ -715,7 +735,7 @@ export default function HomeScreen() {
               <Pressable
                 onPress={async () => {
                   setPickerOpen(false);
-                  await clearFeatured(); // ✅ clears UI + DB
+                  await clearFeatured();
                 }}
                 style={{
                   borderWidth: 1,
@@ -734,12 +754,12 @@ export default function HomeScreen() {
                   onPress={async () => {
                     setFeaturedExercise(ex);
                     setPickerOpen(false);
-                    await loadFeatured(ex.exercise_id);
 
                     const { data: userRes } = await supabase.auth.getUser();
                     const uid = userRes.user?.id;
 
                     if (uid) {
+                      await loadFeatured(uid, ex.exercise_id); // ✅
                       const { error } = await supabase
                         .from("profiles")
                         .update({ featured_exercise_id: ex.exercise_id })
