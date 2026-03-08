@@ -1,9 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
-import { View, Text, Pressable, ActivityIndicator, Alert } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  ActivityIndicator,
+  useWindowDimensions,
+} from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { supabase } from "../../../lib/supabase";
 import FormScreen from "../../../components/FormScreen";
 import { useAppColors } from "../../../lib/theme";
+import { formatWorkoutType } from "../../../lib/format";
 
 type FriendshipRow = {
   user_low: string;
@@ -45,7 +52,7 @@ function groupBy<T>(arr: T[], keyFn: (x: T) => string) {
 }
 
 function formatPrettyDate(ymdStr: string) {
-  const d = new Date(ymdStr + "T00:00:00"); // prevent timezone shift
+  const d = new Date(ymdStr + "T00:00:00");
   if (isNaN(d.getTime())) return ymdStr;
 
   const month = d.toLocaleString(undefined, { month: "long" });
@@ -71,12 +78,12 @@ function formatPrettyDate(ymdStr: string) {
 
 export default function FriendsWorkoutsScreen() {
   const c = useAppColors();
+  const { width } = useWindowDimensions();
 
   const [days, setDays] = useState(7);
   const [status, setStatus] = useState("Loading...");
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<WorkoutRow[]>([]);
-
   const [refreshing, setRefreshing] = useState(false);
 
   const card = useMemo(
@@ -91,17 +98,11 @@ export default function FriendsWorkoutsScreen() {
     [c]
   );
 
-  const pillBtn = useMemo(
-    () => ({
-      borderWidth: 1,
-      borderColor: c.border,
-      backgroundColor: c.card,
-      borderRadius: 999,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-    }),
-    [c]
-  );
+  const cardGap = 10;
+  const cardWidth = useMemo(() => {
+    const usableWidth = width - 32;
+    return (usableWidth - cardGap) / 2;
+  }, [width]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -117,9 +118,6 @@ export default function FriendsWorkoutsScreen() {
       return;
     }
 
-    // ✅ CRITICAL FIX: only friendships involving ME
-    // We need:
-    // (user_low = myId OR user_high = myId) AND status = 'accepted'
     const { data: fr, error: frErr } = await supabase
       .from("friendships")
       .select("user_low, user_high, status")
@@ -144,7 +142,6 @@ export default function FriendsWorkoutsScreen() {
       return;
     }
 
-    // 2) Fetch friends' workouts in last N days
     const since = new Date();
     since.setDate(since.getDate() - days);
     const sinceYMD = ymd(since);
@@ -200,16 +197,14 @@ export default function FriendsWorkoutsScreen() {
   }, [load]);
 
   const grouped = useMemo(() => groupBy(rows, (r) => r.workout_date), [rows]);
-
   const dayKeys = useMemo(() => Object.keys(grouped).sort((a, b) => (a < b ? 1 : -1)), [grouped]);
 
   const renderWorkout = useCallback(
     (w: WorkoutRow) => {
-      const name = w.profiles?.full_name ?? w.profiles?.username ?? "Unknown";
-      const handle = w.profiles?.username ? `@${w.profiles.username}` : null;
-      const subtitleParts = [handle, w.workout_type].filter(Boolean);
-      const subtitle = subtitleParts.join(" • ");
-      const entryCount = w.workout_entries?.length ?? 0;
+        const name = w.profiles?.full_name ?? "Unknown";
+        const subtitle = formatWorkoutType(w.workout_type);
+        const entryCount = w.workout_entries?.length ?? 0;
+
 
       return (
         <Pressable
@@ -217,53 +212,97 @@ export default function FriendsWorkoutsScreen() {
           onPress={() => {
             router.push(`/friends/workouts/${w.id}`);
           }}
-          style={card}
+          style={{
+            width: cardWidth,
+            borderWidth: 1,
+            borderColor: c.border,
+            backgroundColor: c.card,
+            borderRadius: 14,
+            padding: 12,
+            gap: 6,
+          }}
         >
-          <Text style={{ color: c.text, fontWeight: "900", fontSize: 16 }}>{w.title}</Text>
+          <Text numberOfLines={2} style={{ color: c.text, fontWeight: "900", fontSize: 16 }}>
+            {w.title}
+          </Text>
 
-          <Text style={{ color: c.subtext }}>
+          <Text numberOfLines={2} style={{ color: c.subtext }}>
             {name}
             {subtitle ? ` • ${subtitle}` : ""}
           </Text>
 
           <Text style={{ color: c.subtext }}>
-            {formatPrettyDate(w.workout_date)} • {entryCount} entr{entryCount === 1 ? "y" : "ies"}
+            {entryCount} entr{entryCount === 1 ? "y" : "ies"}
           </Text>
 
-          {!!w.notes && <Text style={{ color: c.text, marginTop: 4 }}>{w.notes}</Text>}
+          {!!w.notes && (
+            <Text numberOfLines={3} style={{ color: c.subtext, marginTop: 2 }}>
+              {w.notes}
+            </Text>
+          )}
+
+          <Text style={{ marginTop: 2, fontWeight: "700", color: c.text }}>View workout →</Text>
         </Pressable>
       );
     },
-    [c, card]
+    [c, cardWidth]
   );
 
   return (
     <FormScreen
-    refreshControlProps={{
-      refreshing,
-      onRefresh,
-    }}
+      refreshControlProps={{
+        refreshing,
+        onRefresh,
+      }}
     >
       <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Friends Workouts</Text>
       <Text style={{ color: c.subtext, marginTop: 4 }}>{status}</Text>
 
-      {/* Range selector */}
-      <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-        {[3, 7, 14].map((d) => {
-          const active = d === days;
-          return (
-            <Pressable
-              key={d}
-              onPress={() => setDays(d)}
-              style={{
-                ...pillBtn,
-                opacity: active ? 1 : 0.75,
-              }}
-            >
-              <Text style={{ color: c.text, fontWeight: "900" }}>{d} days</Text>
-            </Pressable>
-          );
-        })}
+            {/* Range selector */}
+            <View style={{ gap: 10, marginTop: 12 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            borderWidth: 1,
+            borderColor: c.border,
+            backgroundColor: c.card,
+            borderRadius: 14,
+            padding: 4,
+            gap: 4,
+          }}
+        >
+          {[3, 7, 14].map((d) => {
+            const selected = d === days;
+
+            return (
+              <Pressable
+                key={d}
+                onPress={() => setDays(d)}
+                style={{
+                  flex: 1,
+                  borderRadius: 10,
+                  paddingVertical: 10,
+                  paddingHorizontal: 8,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: selected ? c.primary : "transparent",
+                  borderWidth: selected ? 0 : 1,
+                  borderColor: selected ? "transparent" : c.border,
+                }}
+              >
+                <Text
+                  style={{
+                    fontWeight: "800",
+                    color: selected ? c.primaryText : c.text,
+                    fontSize: 13,
+                  }}
+                >
+                  {d} Days
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       {loading && (
@@ -273,14 +312,17 @@ export default function FriendsWorkoutsScreen() {
         </View>
       )}
 
-      {/* Grouped list */}
+      {/* Grouped by day */}
       <View style={{ marginTop: 14, gap: 14 }}>
         {dayKeys.map((day) => (
           <View key={day} style={{ gap: 10 }}>
             <Text style={{ color: c.text, fontWeight: "900", fontSize: 16 }}>
               {formatPrettyDate(day)}
             </Text>
-            {grouped[day].map(renderWorkout)}
+
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: cardGap }}>
+              {grouped[day].map(renderWorkout)}
+            </View>
           </View>
         ))}
       </View>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, TextInput, Pressable, Alert } from "react-native";
+import { Text, TextInput, Pressable, Alert } from "react-native";
 import { Stack, router } from "expo-router";
 import { supabase } from "../../lib/supabase";
 import FormScreen from "../../components/FormScreen";
@@ -33,7 +33,11 @@ export default function LoginScreen() {
         return;
       }
 
-      const { error } = await supabase.auth.signInWithPassword({ email: e, password });
+      const { error } = await supabase.auth.signInWithPassword({
+        email: e,
+        password,
+      });
+
       if (error) throw error;
 
       router.replace("/(tabs)");
@@ -49,6 +53,9 @@ export default function LoginScreen() {
       <Stack.Screen options={{ title: "Log In" }} />
 
       <Text style={{ fontSize: 24, fontWeight: "800", color: c.text }}>Welcome back</Text>
+      <Text style={{ color: c.subtext }}>
+        Log in with the email and password you used when creating your account.
+      </Text>
 
       <TextInput
         placeholder="Email"

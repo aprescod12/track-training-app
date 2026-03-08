@@ -17,7 +17,10 @@ type Workout = {
 
 type EventRow = {
   id: string;
-  starts_at: string; // timestamptz
+  title: string;
+  notes: string | null;
+  starts_at: string;
+  ends_at: string | null;
 };
 
 function addDays(d: Date, n: number) {
@@ -35,7 +38,7 @@ function isSameDay(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 function weekdayMonFirst(d: Date) {
-  return (d.getDay() + 6) % 7; // 0=Mon ... 6=Sun
+  return (d.getDay() + 6) % 7;
 }
 function buildMonthGrid(anchor: Date) {
   const first = startOfMonth(anchor);
@@ -47,13 +50,19 @@ function buildMonthGrid(anchor: Date) {
   });
 }
 
-// Convert timestamptz -> YYYY-MM-DD key (local day)
 function ymdLocal(ts: string) {
   const d = new Date(ts);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function formatEventTime(ts: string) {
+  return new Date(ts).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export default function CalendarScreen() {
@@ -66,6 +75,7 @@ export default function CalendarScreen() {
   const [monthWorkouts, setMonthWorkouts] = useState<Workout[]>([]);
   const [selectedDayWorkouts, setSelectedDayWorkouts] = useState<Workout[]>([]);
   const [monthEvents, setMonthEvents] = useState<EventRow[]>([]);
+  const [selectedDayEvents, setSelectedDayEvents] = useState<EventRow[]>([]);
 
   const [status, setStatus] = useState("Loading...");
   const [refreshing, setRefreshing] = useState(false);
@@ -102,7 +112,6 @@ export default function CalendarScreen() {
   const loadMonth = useCallback(async () => {
     setStatus("Loading...");
 
-    // ✅ Get uid once and use it to scope workouts
     const { data: userData, error: userErr } = await supabase.auth.getUser();
     const uid = userData.user?.id ?? null;
 
@@ -111,17 +120,17 @@ export default function CalendarScreen() {
       setMonthWorkouts([]);
       setSelectedDayWorkouts([]);
       setMonthEvents([]);
+      setSelectedDayEvents([]);
       return;
     }
 
     const startKey = formatYMD(startOfMonth(monthAnchor));
     const endKey = formatYMD(endOfMonth(monthAnchor));
 
-    // ---- WORKOUTS (✅ MY workouts only) ----
     const { data: wData, error: wErr } = await supabase
       .from("workouts")
       .select("id, workout_date, title, notes, workout_type")
-      .eq("user_id", uid) // ✅ CRITICAL FIX
+      .eq("user_id", uid)
       .gte("workout_date", startKey)
       .lte("workout_date", endKey)
       .order("workout_date", { ascending: false })
@@ -132,34 +141,29 @@ export default function CalendarScreen() {
       setMonthWorkouts([]);
       setSelectedDayWorkouts([]);
       setMonthEvents([]);
+      setSelectedDayEvents([]);
       return;
     }
 
     const wRows = (wData ?? []) as Workout[];
     setMonthWorkouts(wRows);
 
-    // ---- EVENTS (already scoped) ----
     const startDate = startOfMonth(monthAnchor);
     const endExclusive = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + 1, 1);
 
-    const { data: eData, error: eErr } = await supabase
+    const { data: eData } = await supabase
       .from("calendar_events")
-      .select("id, starts_at")
+      .select("id, title, notes, starts_at, ends_at")
       .eq("user_id", uid)
       .gte("starts_at", startDate.toISOString())
       .lt("starts_at", endExclusive.toISOString())
       .order("starts_at", { ascending: true });
 
-    if (eErr) {
-      // don’t block workouts if events fail
-      setMonthEvents([]);
-    } else {
-      setMonthEvents((eData ?? []) as EventRow[]);
-    }
+    const eRows = (eData ?? []) as EventRow[];
+    setMonthEvents(eRows);
 
-    // populate selected day workouts
-    const dayRows = wRows.filter((w) => w.workout_date === selectedKey);
-    setSelectedDayWorkouts(dayRows);
+    setSelectedDayWorkouts(wRows.filter((w) => w.workout_date === selectedKey));
+    setSelectedDayEvents(eRows.filter((e) => ymdLocal(e.starts_at) === selectedKey));
 
     setStatus("Loaded ✅");
   }, [monthAnchor, selectedKey]);
@@ -180,6 +184,7 @@ export default function CalendarScreen() {
     setSelectedDate(d);
     const key = formatYMD(d);
     setSelectedDayWorkouts(monthWorkouts.filter((w) => w.workout_date === key));
+    setSelectedDayEvents(monthEvents.filter((e) => ymdLocal(e.starts_at) === key));
   }
 
   const prevMonth = useCallback(() => {
@@ -225,7 +230,6 @@ export default function CalendarScreen() {
 
       <Text style={{ color: c.subtext }}>{status}</Text>
 
-      {/* Month card */}
       <View
         {...panResponder.panHandlers}
         style={{
@@ -354,7 +358,6 @@ export default function CalendarScreen() {
                             }}
                           />
                         )}
-
                         {liftCount >= 1 && (
                           <View
                             style={{
@@ -401,7 +404,6 @@ export default function CalendarScreen() {
         </View>
       </View>
 
-      {/* Selected day list */}
       <View
         style={{
           borderWidth: 1,
@@ -409,15 +411,49 @@ export default function CalendarScreen() {
           backgroundColor: c.card,
           borderRadius: 14,
           padding: 14,
-          gap: 10,
+          gap: 12,
         }}
       >
         <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>
           {selectedDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
         </Text>
 
-        {selectedDayWorkouts.length ? (
-          <>
+        {!!selectedDayEvents.length && (
+          <View style={{ gap: 8 }}>
+            <Text style={{ fontWeight: "800", color: c.text }}>Events</Text>
+            {selectedDayEvents.map((e) => (
+              <Pressable
+                key={e.id}
+                onPress={() => router.push(`/calendar/event/${e.id}`)}
+                style={{
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  backgroundColor: c.bg,
+                  borderRadius: 14,
+                  padding: 12,
+                  gap: 6,
+                }}
+              >
+                <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 10 }}>
+                  <Text style={{ fontWeight: "800", color: c.text, flex: 1 }}>{e.title}</Text>
+                  <Text style={{ color: c.subtext }}>{formatEventTime(e.starts_at)}</Text>
+                </View>
+
+                {!!e.notes && (
+                  <Text numberOfLines={2} style={{ color: c.subtext }}>
+                    {e.notes}
+                  </Text>
+                )}
+
+                <Text style={{ fontWeight: "700", color: c.text }}>View event →</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
+        {!!selectedDayWorkouts.length && (
+          <View style={{ gap: 8 }}>
+            <Text style={{ fontWeight: "800", color: c.text }}>Workouts</Text>
             {selectedDayWorkouts.map((w) => (
               <Pressable
                 key={w.id}
@@ -437,18 +473,24 @@ export default function CalendarScreen() {
                     {w.notes}
                   </Text>
                 )}
-                <Text style={{ fontWeight: "700", color: c.text }}>View →</Text>
+                <Text style={{ fontWeight: "700", color: c.text }}>View workout →</Text>
               </Pressable>
             ))}
+          </View>
+        )}
 
-            <PrimaryButton title="View workouts on this day" onPress={() => router.push(`/calendar/${selectedKey}`)} />
-          </>
-        ) : (
+        {!selectedDayEvents.length && !selectedDayWorkouts.length && (
           <>
-            <Text style={{ color: c.subtext }}>No workouts logged for this day.</Text>
-
-            <PrimaryButton title="Log workout for this day" onPress={() => router.push(`/modal?date=${selectedKey}`)} />
+            <Text style={{ color: c.subtext }}>No events or workouts logged for this day.</Text>
+            <View style={{ gap: 8 }}>
+              <PrimaryButton title="Add event" onPress={() => router.push(`/calendar/add-event?date=${selectedKey}`)} />
+              <PrimaryButton title="Log workout for this day" onPress={() => router.push(`/modal?date=${selectedKey}`)} />
+            </View>
           </>
+        )}
+
+        {(selectedDayEvents.length > 0 || selectedDayWorkouts.length > 0) && (
+          <PrimaryButton title="View full day" onPress={() => router.push(`/calendar/${selectedKey}`)} />
         )}
       </View>
     </FormScreen>

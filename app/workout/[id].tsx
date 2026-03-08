@@ -26,8 +26,6 @@ type Entry = {
   lift_reps: (number | null)[] | null;
   lift_weights: (number | null)[] | null;
   weight: number | null;
-
-  // normalized set storage
   entry_sets?: EntrySetRow[] | null;
 };
 
@@ -39,27 +37,21 @@ type Workout = {
   workout_entries: Entry[];
 };
 
-type ExercisePRRow = {
-  user_id: string;
-  exercise_id: string;
-
-  best_time_sec: number | null;
-  best_time_text: string | null;
-  best_time_entry_id: string | null;
-  best_time_set_number: number | null;
-  best_time_rep_number: number | null;
-
-  best_weight: number | null;
-  best_reps: number | null;
-  best_weight_entry_id: string | null;
-  best_weight_set_number: number | null;
-
-  updated_at: string;
-};
-
 function fmtNum(n: number | null | undefined) {
   if (n === null || n === undefined) return "";
   return String(n);
+}
+
+function formatPrettyDate(ymd: string) {
+  const d = new Date(ymd + "T00:00:00");
+  if (isNaN(d.getTime())) return ymd;
+
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export default function WorkoutDetail() {
@@ -78,7 +70,6 @@ export default function WorkoutDetail() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // ✅ PR pill per entry id (now sourced from exercise_prs)
   const [prByEntryId, setPrByEntryId] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
@@ -128,7 +119,6 @@ export default function WorkoutDetail() {
 
   const entries = useMemo(() => item?.workout_entries ?? [], [item]);
 
-  // ✅ Pull PR pointers from exercise_prs and mark entries in THIS workout that match.
   const loadPRBadgesFromDB = useCallback(async () => {
     if (!item) return;
 
@@ -143,15 +133,14 @@ export default function WorkoutDetail() {
       setPrByEntryId({});
       return;
     }
+
     const uid = userData.user?.id;
     if (!uid) {
       setPrByEntryId({});
       return;
     }
 
-    const exerciseIds = Array.from(
-      new Set(entries.map((e) => e.exercise_id).filter((x): x is string => !!x))
-    );
+    const exerciseIds = Array.from(new Set(entries.map((e) => e.exercise_id).filter((x): x is string => !!x)));
 
     if (!exerciseIds.length) {
       setPrByEntryId({});
@@ -170,7 +159,6 @@ export default function WorkoutDetail() {
       return;
     }
 
-    // Build a set of entry_ids that are current PR holders
     const prEntryIds = new Set<string>();
     for (const r of (prs as any[]) ?? []) {
       const t = r.best_time_entry_id as string | null;
@@ -189,14 +177,15 @@ export default function WorkoutDetail() {
 
   useEffect(() => {
     if (item) loadPRBadgesFromDB();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item]);
+  }, [item, loadPRBadgesFromDB]);
 
   return (
     <>
       <FormScreen edges={["left", "right"]}>
-        <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Workout</Text>
-        <Text style={{ color: c.subtext }}>{status}</Text>
+        <View style={{ gap: 4 }}>
+          <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Workout</Text>
+          <Text style={{ color: c.subtext }}>{status}</Text>
+        </View>
 
         {item && (
           <>
@@ -206,27 +195,32 @@ export default function WorkoutDetail() {
                 borderColor: c.border,
                 backgroundColor: c.card,
                 borderRadius: 14,
-                padding: 12,
-                gap: 8,
+                padding: 14,
+                gap: 12,
               }}
             >
-              <Text style={{ fontWeight: "800", color: c.text }}>{item.title}</Text>
-              <Text style={{ color: c.subtext }}>{item.workout_date}</Text>
+              <View style={{ gap: 4 }}>
+                <Text style={{ fontSize: 18, fontWeight: "800", color: c.text }}>{item.title}</Text>
+                <Text style={{ color: c.subtext }}>{formatPrettyDate(item.workout_date)}</Text>
+              </View>
+
               {!!item.notes && <Text style={{ color: c.text }}>{item.notes}</Text>}
 
-              <View style={{ gap: 10, marginTop: 6 }}>
-                <PrimaryButton title="Edit" onPress={() => router.push(`/workout/${item.id}/edit`)} />
-                <PrimaryButton title="Delete" onPress={() => setConfirmOpen(true)} />
+              <View style={{ gap: 10 }}>
+                <PrimaryButton title="Edit workout" onPress={() => router.push(`/workout/${item.id}/edit`)} />
+                <PrimaryButton title="Delete workout" onPress={() => setConfirmOpen(true)} />
               </View>
             </View>
 
-            <Text style={{ fontWeight: "800", color: c.text }}>Entries</Text>
+            <View style={{ gap: 4 }}>
+              <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>Entries</Text>
+              <Text style={{ color: c.subtext }}>Exercise details, times, lift sets, and notes.</Text>
+            </View>
 
             {entries.length ? (
               entries.map((e) => {
                 const isLiftEntry = Array.isArray(e.lift_reps) || Array.isArray(e.lift_weights);
                 const isTrackEntry = e.set_times !== undefined || e.reps !== undefined;
-
                 const showPR = !!prByEntryId[e.id];
 
                 return (
@@ -237,31 +231,52 @@ export default function WorkoutDetail() {
                       borderColor: c.border,
                       backgroundColor: c.card,
                       borderRadius: 14,
-                      padding: 12,
-                      gap: 6,
+                      padding: 14,
+                      gap: 12,
                     }}
                   >
-                    <View
-                      style={{
-                        position: "relative",
-                        paddingRight: 120, // leave space so the title doesn’t run under buttons
-                        minHeight: 34, // stable top area
-                      }}
-                    >
-                      <Text style={{ fontWeight: "700", color: c.text }}>
-                        {e.exercises?.name ?? e.exercise ?? "Entry"}
-                      </Text>
+                    <View style={{ gap: 10 }}>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                        <View style={{ flex: 1, gap: 6 }}>
+                          <Text style={{ fontWeight: "800", color: c.text }}>
+                            {e.exercises?.name ?? e.exercise ?? "Entry"}
+                          </Text>
 
-                      {/* Right stack: absolute so layout doesn't jump */}
-                      <View
-                        style={{
-                          position: "absolute",
-                          right: 0,
-                          top: 0,
-                          alignItems: "flex-end",
-                          gap: 8,
-                        }}
-                      >
+                          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                            {e.sets !== null && (
+                              <View
+                                style={{
+                                  borderWidth: 1,
+                                  borderColor: c.border,
+                                  borderRadius: 999,
+                                  paddingVertical: 4,
+                                  paddingHorizontal: 10,
+                                  backgroundColor: c.bg,
+                                }}
+                              >
+                                <Text style={{ fontSize: 12, fontWeight: "800", color: c.text }}>
+                                  {e.sets} {e.sets === 1 ? "set" : "sets"}
+                                </Text>
+                              </View>
+                            )}
+
+                            {showPR && (
+                              <View
+                                style={{
+                                  borderWidth: 1,
+                                  borderColor: c.border,
+                                  borderRadius: 999,
+                                  paddingVertical: 4,
+                                  paddingHorizontal: 10,
+                                  backgroundColor: c.bg,
+                                }}
+                              >
+                                <Text style={{ fontSize: 12, fontWeight: "900", color: c.text }}>🏆 PR</Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+
                         {e.exercise_id ? (
                           <Pressable
                             onPress={() => router.push(`/history/${e.exercise_id}`)}
@@ -277,53 +292,63 @@ export default function WorkoutDetail() {
                             <Text style={{ fontWeight: "600", color: c.text }}>History</Text>
                           </Pressable>
                         ) : null}
-
-                        {showPR ? (
-                          <View
-                            style={{
-                              borderWidth: 1,
-                              borderColor: c.border,
-                              borderRadius: 999,
-                              paddingVertical: 4,
-                              paddingHorizontal: 10,
-                              backgroundColor: c.bg,
-                            }}
-                          >
-                            <Text style={{ fontWeight: "900", fontSize: 12, color: c.text }}>🏆 PR</Text>
-                          </View>
-                        ) : null}
                       </View>
                     </View>
 
-                    {e.sets !== null && <Text style={{ color: c.subtext }}>Sets: {e.sets}</Text>}
-
                     {isLiftEntry && (
-                      <View style={{ gap: 6, marginTop: 2 }}>
-                        <Text style={{ fontWeight: "800", color: c.text }}>Lift sets</Text>
+                      <View style={{ gap: 8 }}>
+                        <Text style={{ fontWeight: "800", color: c.text }}>Lift Sets</Text>
 
                         {(e.lift_reps ?? []).map((r, idx) => {
                           const w = e.lift_weights?.[idx] ?? null;
                           if (r === null && w === null) return null;
+
                           return (
-                            <Text key={idx} style={{ color: c.subtext }} numberOfLines={2}>
-                              Set {idx + 1}: {r !== null ? `${r} reps` : "—"} {w !== null ? `@ ${fmtNum(w)}` : ""}
-                            </Text>
+                            <View
+                              key={idx}
+                              style={{
+                                borderWidth: 1,
+                                borderColor: c.border,
+                                backgroundColor: c.bg,
+                                borderRadius: 12,
+                                padding: 12,
+                                gap: 4,
+                              }}
+                            >
+                              <Text style={{ fontWeight: "700", color: c.text }}>Set {idx + 1}</Text>
+                              <Text style={{ color: c.subtext }}>
+                                {r !== null ? `${r} reps` : "—"} {w !== null ? `@ ${fmtNum(w)}` : ""}
+                              </Text>
+                            </View>
                           );
                         })}
                       </View>
                     )}
 
                     {!isLiftEntry && isTrackEntry && (
-                      <View style={{ gap: 6, marginTop: 2 }}>
+                      <View style={{ gap: 10 }}>
                         {e.reps !== null && <Text style={{ color: c.subtext }}>Reps: {e.reps}</Text>}
 
                         {Array.isArray(e.set_times) && e.set_times.length ? (
-                          <View style={{ gap: 6 }}>
+                          <View style={{ gap: 8 }}>
                             <Text style={{ fontWeight: "800", color: c.text }}>Times</Text>
                             {e.set_times.map((row, sIdx) => (
-                              <Text key={sIdx} style={{ color: c.subtext }} numberOfLines={3}>
-                                Set {sIdx + 1}: {(row ?? []).filter(Boolean).join(" • ") || "—"}
-                              </Text>
+                              <View
+                                key={sIdx}
+                                style={{
+                                  borderWidth: 1,
+                                  borderColor: c.border,
+                                  backgroundColor: c.bg,
+                                  borderRadius: 12,
+                                  padding: 12,
+                                  gap: 4,
+                                }}
+                              >
+                                <Text style={{ fontWeight: "700", color: c.text }}>Set {sIdx + 1}</Text>
+                                <Text style={{ color: c.subtext }}>
+                                  {(row ?? []).filter(Boolean).join(" • ") || "—"}
+                                </Text>
+                              </View>
                             ))}
                           </View>
                         ) : (
@@ -334,12 +359,27 @@ export default function WorkoutDetail() {
                       </View>
                     )}
 
-                    {!!e.notes && <Text style={{ color: c.subtext }}>{e.notes}</Text>}
+                    {!!e.notes && (
+                      <View style={{ gap: 6 }}>
+                        <Text style={{ fontWeight: "800", color: c.text }}>Notes</Text>
+                        <Text style={{ color: c.subtext }}>{e.notes}</Text>
+                      </View>
+                    )}
                   </View>
                 );
               })
             ) : (
-              <Text style={{ color: c.subtext }}>No entries found.</Text>
+              <View
+                style={{
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  backgroundColor: c.card,
+                  borderRadius: 14,
+                  padding: 14,
+                }}
+              >
+                <Text style={{ color: c.subtext }}>No entries found.</Text>
+              </View>
             )}
           </>
         )}
@@ -387,6 +427,7 @@ export default function WorkoutDetail() {
                 disabled={deleting}
                 onPress={async () => {
                   if (!workoutId) return;
+
                   try {
                     setDeleting(true);
                     setStatus("Deleting...");

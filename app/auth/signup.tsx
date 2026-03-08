@@ -1,14 +1,23 @@
 import { useState } from "react";
-import { View, Text, TextInput, Pressable, Alert } from "react-native";
+import { Text, TextInput, Pressable, Alert } from "react-native";
 import { Stack, router } from "expo-router";
 import { supabase } from "../../lib/supabase";
 import FormScreen from "../../components/FormScreen";
 import { useAppColors } from "../../lib/theme";
 
+function normalizeUsername(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function isValidUsername(value: string) {
+  return /^[a-z0-9_]{3,20}$/.test(value);
+}
+
 export default function SignupScreen() {
   const c = useAppColors();
 
   const [fullName, setFullName] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,18 +37,68 @@ export default function SignupScreen() {
       setLoading(true);
 
       const e = email.trim().toLowerCase();
-      if (!e || !password) {
-        Alert.alert("Missing info", "Enter email and password.");
+      const u = normalizeUsername(username);
+      const name = fullName.trim();
+
+      if (!u || !e || !password) {
+        Alert.alert("Missing info", "Enter username, email, and password.");
         return;
       }
 
-      const { error } = await supabase.auth.signUp({
+      if (!isValidUsername(u)) {
+        Alert.alert(
+          "Invalid username",
+          "Username must be 3–20 characters and use only lowercase letters, numbers, and underscores."
+        );
+        return;
+      }
+
+      const { data: existingUsername, error: usernameCheckErr } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("username", u)
+        .maybeSingle();
+
+      if (usernameCheckErr) throw usernameCheckErr;
+
+      if (existingUsername) {
+        Alert.alert("Username taken", "That username is already in use. Try another one.");
+        return;
+      }
+
+      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
         email: e,
         password,
-        options: { data: { full_name: fullName.trim() } },
+        options: {
+          data: {
+            full_name: name,
+            username: u,
+          },
+        },
       });
 
-      if (error) throw error;
+      if (signUpErr) throw signUpErr;
+
+      const userId = signUpData.user?.id ?? signUpData.session?.user?.id ?? null;
+
+      if (userId) {
+        const { error: profileErr } = await supabase.from("profiles").upsert(
+          {
+            id: userId,
+            full_name: name || null,
+            username: u,
+          },
+          { onConflict: "id" }
+        );
+
+        if (profileErr) {
+          if ((profileErr as any).code === "23505") {
+            Alert.alert("Username taken", "That username is already in use. Try another one.");
+            return;
+          }
+          throw profileErr;
+        }
+      }
 
       Alert.alert(
         "Account created",
@@ -71,6 +130,20 @@ export default function SignupScreen() {
         autoCapitalize="words"
         style={inputStyle}
       />
+
+      <TextInput
+        placeholder="Username"
+        placeholderTextColor={placeholderColor}
+        value={username}
+        onChangeText={(v) => setUsername(normalizeUsername(v))}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={inputStyle}
+      />
+
+      <Text style={{ color: c.subtext, marginTop: -4 }}>
+        3–20 chars • lowercase letters, numbers, underscores
+      </Text>
 
       <TextInput
         placeholder="Email"

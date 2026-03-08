@@ -37,25 +37,21 @@ type EntryRow = {
 };
 
 type EntryDraft = {
-  id?: string; // DB id (existing rows)
-  key: string; // stable key for React list
+  id?: string;
+  key: string;
 
   exercise_id?: string | null;
   exercise: string;
   sets: string;
 
-  // track
   reps: string;
   timesApplicable: boolean;
   set_times: string[][];
 
-  // lift
   lift_reps: string[];
   lift_weights: string[];
 
-  // track optional
   weight: string;
-
   notes: string;
 };
 
@@ -79,9 +75,11 @@ function buildEntrySetsFromTrack(entryId: string, setTimes: string[][] | null) {
   return rows;
 }
 
-// NOTE: we set rep_number = 1 for lift rows to avoid the UNIQUE constraint
-// allowing duplicates when rep_number is null.
-function buildEntrySetsFromLift(entryId: string, liftReps: (number | null)[] | null, liftWeights: (number | null)[] | null) {
+function buildEntrySetsFromLift(
+  entryId: string,
+  liftReps: (number | null)[] | null,
+  liftWeights: (number | null)[] | null
+) {
   const repsArr = Array.isArray(liftReps) ? liftReps : [];
   const wArr = Array.isArray(liftWeights) ? liftWeights : [];
 
@@ -149,7 +147,6 @@ export default function EditWorkout() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
 
-  // dark-mode safe input styling
   const placeholderColor = c.dark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.35)";
   const inputStyle = {
     borderWidth: 1,
@@ -170,11 +167,11 @@ export default function EditWorkout() {
 
   useEffect(() => {
     setEntries((prev) => {
-      if (!prev.length) return prev; // 👈 guard
+      if (!prev.length) return prev;
 
-    return prev.map((e) => {
+      return prev.map((e) => {
         const setsN = Math.max(toPosInt(e.sets), 1);
-  
+
         if (workoutType === "lift") {
           return {
             ...e,
@@ -195,15 +192,13 @@ export default function EditWorkout() {
             set_times: resizeSetTimes(e.set_times ?? [[]], setsN, repsN),
           };
         }
-      })
-  });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      });
+    });
   }, [workoutType]);
 
   const [status, setStatus] = useState("Loading...");
   const [saving, setSaving] = useState(false);
 
-  // unsaved changes guard
   const [initialSnapshot, setInitialSnapshot] = useState<string>("");
 
   const isDirty = useMemo(() => {
@@ -269,15 +264,10 @@ export default function EditWorkout() {
 
     const drafts: EntryDraft[] = (row.workout_entries ?? []).map((e) => {
       const setsN = e.sets ?? 1;
-
-      // track
       const repsN = e.reps ?? 0;
       const timesApplicable = e.set_times !== null;
-      const localTimes = Array.isArray(e.set_times)
-        ? e.set_times
-        : resizeSetTimes([[]], setsN, repsN);
+      const localTimes = Array.isArray(e.set_times) ? e.set_times : resizeSetTimes([[]], setsN, repsN);
 
-      // lift arrays -> strings
       const liftRepsStr = (e.lift_reps ?? []).map((x) => (x == null ? "" : String(x)));
       const liftWeightsStr = (e.lift_weights ?? []).map((x) => (x == null ? "" : String(x)));
 
@@ -341,7 +331,6 @@ export default function EditWorkout() {
     });
   }
 
-  // --------- Track set/rep controls ----------
   function addTrackSet(index: number) {
     setEntries((prev) => {
       const copy = [...prev];
@@ -392,7 +381,6 @@ export default function EditWorkout() {
     });
   }
 
-  // --------- Lift set controls ----------
   function addLiftSet(index: number) {
     setEntries((prev) => {
       const copy = [...prev];
@@ -442,39 +430,37 @@ export default function EditWorkout() {
 
   async function save() {
     if (!id) return;
-  
+
     try {
       setSaving(true);
       setStatus("Saving...");
-  
+
       const trimmedTitle = title.trim() || "Workout";
-  
-      // 1) Update workout
+
       const { error: wErr } = await supabase
         .from("workouts")
         .update({ title: trimmedTitle, notes, workout_type: workoutType })
         .eq("id", id);
-  
+
       if (wErr) throw wErr;
-  
-      // 2) Build update/insert payloads
+
       const updates: any[] = [];
       const inserts: any[] = [];
-  
+
       for (const e of entries) {
         const exercise = e.exercise.trim();
         if (!exercise) continue;
-  
+
         const exercise_id = await getOrCreateExerciseId(exercise);
         const setsN = Math.max(toPosInt(e.sets), 1);
-  
+
         if (workoutType === "lift") {
           const repsArr = (e.lift_reps ?? []).slice(0, setsN).map((x) => x.trim());
           const wArr = (e.lift_weights ?? []).slice(0, setsN).map((x) => x.trim());
-  
+
           const lift_reps = repsArr.map((x) => (x ? parseInt(x, 10) : null));
           const lift_weights = wArr.map((x) => (x ? Number(x) : null));
-  
+
           const row = {
             workout_id: id,
             exercise_id,
@@ -487,17 +473,17 @@ export default function EditWorkout() {
             weight: null,
             notes: e.notes.trim() || null,
           };
-  
+
           if (e.id) updates.push({ id: e.id, ...row });
           else inserts.push(row);
         } else {
           const repsN = toPosInt(e.reps);
           const prevTimes = Array.isArray(e.set_times) ? e.set_times : [[]];
-  
+
           const set_times = e.timesApplicable
             ? resizeSetTimes(prevTimes, setsN, Math.max(repsN, 0)).map((row) => row.map((t) => t.trim()))
             : null;
-  
+
           const row = {
             workout_id: id,
             exercise_id,
@@ -510,107 +496,96 @@ export default function EditWorkout() {
             weight: e.weight.trim() ? Number(e.weight) : null,
             notes: e.notes.trim() || null,
           };
-  
+
           if (e.id) updates.push({ id: e.id, ...row });
           else inserts.push(row);
         }
       }
-  
-      // Track which entry_ids need entry_sets rebuilt
+
       const updatedEntryIds: string[] = updates.map((u) => u.id);
-  
-      // 3) Delete removed entries (cascades entry_sets)
+
       if (deletedEntryIds.length) {
-        const { error: delErr } = await supabase
-          .from("workout_entries")
-          .delete()
-          .in("id", deletedEntryIds);
+        const { error: delErr } = await supabase.from("workout_entries").delete().in("id", deletedEntryIds);
         if (delErr) throw delErr;
       }
-  
-      // 4) Update existing rows
+
       for (const u of updates) {
         const { id: entryId, ...patch } = u;
         const { error } = await supabase.from("workout_entries").update(patch).eq("id", entryId);
         if (error) throw error;
       }
-  
-      // 5) Insert new rows (RETURN ids + fields so we can build entry_sets)
+
       let inserted: any[] = [];
       if (inserts.length) {
         const { data, error: insErr } = await supabase
           .from("workout_entries")
           .insert(inserts)
           .select("id, set_times, lift_reps, lift_weights");
-  
+
         if (insErr) throw insErr;
         inserted = data ?? [];
       }
-  
-      // 6) Sync entry_sets
-      // 6a) For UPDATED entries: delete prior sets, re-insert from current UI state
+
       if (updatedEntryIds.length) {
-        const { error: delSetsErr } = await supabase
-          .from("entry_sets")
-          .delete()
-          .in("entry_id", updatedEntryIds);
-  
+        const { error: delSetsErr } = await supabase.from("entry_sets").delete().in("entry_id", updatedEntryIds);
         if (delSetsErr) throw delSetsErr;
-  
+
         const idToDraft = new Map(entries.filter((e) => e.id).map((e) => [e.id!, e]));
         const setRows: any[] = [];
-  
+
         for (const entryId of updatedEntryIds) {
           const d = idToDraft.get(entryId);
           if (!d) continue;
-  
+
           const setsN = Math.max(toPosInt(d.sets), 1);
-  
+
           if (workoutType === "lift") {
             const repsArr = (d.lift_reps ?? [])
               .slice(0, setsN)
               .map((x) => x.trim())
               .map((x) => (x ? parseInt(x, 10) : null));
-  
+
             const wArr = (d.lift_weights ?? [])
               .slice(0, setsN)
               .map((x) => x.trim())
               .map((x) => (x ? Number(x) : null));
-  
+
             setRows.push(...buildEntrySetsFromLift(entryId, repsArr, wArr));
           } else {
             const repsN = Math.max(toPosInt(d.reps), 0);
             const setTimes = d.timesApplicable
               ? resizeSetTimes(d.set_times ?? [[]], setsN, repsN).map((row) => row.map((t) => t.trim()))
               : null;
-  
+
             setRows.push(...buildEntrySetsFromTrack(entryId, setTimes));
           }
         }
-  
+
         if (setRows.length) {
           const { error: insSetsErr } = await supabase.from("entry_sets").insert(setRows);
           if (insSetsErr) throw insSetsErr;
         }
       }
-  
-      // 6b) For INSERTED entries: build sets from returned DB rows
+
       if (inserted.length) {
         const setRows: any[] = [];
         for (const row of inserted) {
-          if (workoutType === "lift") setRows.push(...buildEntrySetsFromLift(row.id, row.lift_reps, row.lift_weights));
-          else setRows.push(...buildEntrySetsFromTrack(row.id, row.set_times));
+          if (workoutType === "lift") {
+            setRows.push(...buildEntrySetsFromLift(row.id, row.lift_reps, row.lift_weights));
+          } else {
+            setRows.push(...buildEntrySetsFromTrack(row.id, row.set_times));
+          }
         }
-  
+
         if (setRows.length) {
           const { error: insSetsErr } = await supabase.from("entry_sets").insert(setRows);
           if (insSetsErr) throw insSetsErr;
         }
       }
-  
+
       setStatus("Saved ✅");
       setDeletedEntryIds([]);
-  
+
       const snap = JSON.stringify({
         title: trimmedTitle,
         notes,
@@ -619,7 +594,7 @@ export default function EditWorkout() {
         deletedEntryIds: [],
       });
       setInitialSnapshot(snap);
-  
+
       router.back();
     } catch (e: any) {
       setStatus("Error: " + (e?.message ?? String(e)));
@@ -628,51 +603,104 @@ export default function EditWorkout() {
     }
   }
 
-  // pill button helper (dark-mode safe)
   const pillStyle = (active: boolean) => ({
     flex: 1,
     borderWidth: 1,
-    borderColor: active ? c.primary : c.border,
+    borderColor: c.border,
     borderRadius: 999,
-    paddingVertical: 8,
+    paddingVertical: 10,
     alignItems: "center" as const,
-    backgroundColor: active ? c.primary : "transparent",
+    backgroundColor: active ? c.primary : c.bg,
   });
 
   return (
-    <FormScreen edges={["left", "right"]}>
-      <Text style={{ color: c.subtext }}>{status}</Text>
+    <FormScreen edges={["left", "right"]} contentContainerStyle={{ paddingBottom: 28 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Edit Workout</Text>
+          <Text style={{ color: c.subtext }}>
+            Update workout details, entries, and notes.
+          </Text>
+        </View>
 
-      {/* Workout type toggle (optional but nice) */}
-      <View style={{ flexDirection: "row", gap: 10 }}>
-        <Pressable onPress={() => setWorkoutType("track")} style={pillStyle(!isLift)}>
-          <Text style={{ fontWeight: "800", color: !isLift ? c.primaryText : c.text }}>Track</Text>
-        </Pressable>
-        <Pressable onPress={() => setWorkoutType("lift")} style={pillStyle(isLift)}>
-          <Text style={{ fontWeight: "800", color: isLift ? c.primaryText : c.text }}>Lift</Text>
+        <Pressable
+          onPress={() => {
+            if (!isDirty) return router.back();
+
+            Alert.alert("Discard changes?", "You have unsaved changes.", [
+              { text: "Keep editing", style: "cancel" },
+              { text: "Discard", style: "destructive", onPress: () => router.back() },
+            ]);
+          }}
+          style={{
+            borderWidth: 1,
+            borderColor: c.border,
+            borderRadius: 999,
+            paddingVertical: 6,
+            paddingHorizontal: 14,
+            backgroundColor: c.card,
+          }}
+        >
+          <Text style={{ fontWeight: "600", color: c.text }}>Cancel</Text>
         </Pressable>
       </View>
 
-      <Text style={{ fontWeight: "800", color: c.text }}>Title</Text>
-      <TextInput
-        value={title}
-        onChangeText={setTitle}
-        placeholder="Workout title"
-        placeholderTextColor={placeholderColor}
-        style={inputStyle}
-      />
+      <Text style={{ color: c.subtext }}>{status}</Text>
 
-      <Text style={{ fontWeight: "800", color: c.text }}>Notes</Text>
-      <TextInput
-        value={notes}
-        onChangeText={setNotes}
-        placeholder="Notes"
-        multiline
-        placeholderTextColor={placeholderColor}
-        style={[inputStyle, { minHeight: 80 }]}
-      />
+      <View
+        style={{
+          borderWidth: 1,
+          borderColor: c.border,
+          backgroundColor: c.card,
+          borderRadius: 14,
+          padding: 14,
+          gap: 12,
+        }}
+      >
+        <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>Workout Details</Text>
 
-      <Text style={{ fontWeight: "800", color: c.text }}>Entries</Text>
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <Pressable onPress={() => setWorkoutType("track")} style={pillStyle(!isLift)}>
+            <Text style={{ fontWeight: "700", color: !isLift ? c.primaryText : c.text }}>Track</Text>
+          </Pressable>
+
+          <Pressable onPress={() => setWorkoutType("lift")} style={pillStyle(isLift)}>
+            <Text style={{ fontWeight: "700", color: isLift ? c.primaryText : c.text }}>Lift</Text>
+          </Pressable>
+        </View>
+
+        <View style={{ gap: 6 }}>
+          <Text style={{ fontWeight: "800", color: c.text }}>Title</Text>
+          <TextInput
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Workout title"
+            placeholderTextColor={placeholderColor}
+            style={inputStyle}
+          />
+        </View>
+
+        <View style={{ gap: 6 }}>
+          <Text style={{ fontWeight: "800", color: c.text }}>Notes</Text>
+          <TextInput
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Notes"
+            multiline
+            placeholderTextColor={placeholderColor}
+            style={[inputStyle, { minHeight: 90, textAlignVertical: "top" }]}
+          />
+        </View>
+      </View>
+
+      <View style={{ gap: 10 }}>
+        <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>Entries</Text>
+        <Text style={{ color: c.subtext }}>
+          {isLift
+            ? "Update each lift and record reps and weight by set."
+            : "Update each drill, sprint, or rep-based track entry."}
+        </Text>
+      </View>
 
       {entries.map((entry, index) => (
         <View
@@ -682,131 +710,154 @@ export default function EditWorkout() {
             borderColor: c.border,
             backgroundColor: c.card,
             borderRadius: 14,
-            padding: 12,
-            gap: 10,
+            padding: 14,
+            gap: 12,
           }}
         >
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={{ fontWeight: "800", color: c.text }}>Entry {index + 1}</Text>
             <Pressable onPress={() => removeEntry(index)}>
-              <Text style={{ color: "#EF4444", fontWeight: "800" }}>Remove</Text>
+              <Text style={{ color: "#DC2626", fontWeight: "700" }}>Remove</Text>
             </Pressable>
           </View>
 
-          <TextInput
-            value={entry.exercise}
-            onChangeText={(v) => patchEntry(index, { exercise: v })}
-            placeholder="Exercise"
-            placeholderTextColor={placeholderColor}
-            style={inputStyle}
-          />
+          <View style={{ gap: 6 }}>
+            <Text style={{ fontWeight: "700", color: c.text }}>Exercise</Text>
+            <TextInput
+              value={entry.exercise}
+              onChangeText={(v) => patchEntry(index, { exercise: v })}
+              placeholder="Exercise"
+              placeholderTextColor={placeholderColor}
+              style={inputStyle}
+            />
+          </View>
 
-          {/* Sets + quick buttons */}
           <View style={{ gap: 8 }}>
-  <TextInput
-    value={entry.sets}
-    onChangeText={(v) => {
-      if (isLift) {
-        const setsN = Math.max(toPosInt(v), 1);
-        patchEntry(index, {
-          sets: v,
-          lift_reps: resizeFlat(entry.lift_reps ?? [""], setsN),
-          lift_weights: resizeFlat(entry.lift_weights ?? [""], setsN),
-        });
-      } else {
-        const setsN = Math.max(toPosInt(v), 1);
-        const repsN = Math.max(toPosInt(entry.reps), 0);
-        patchEntry(index, {
-          sets: v,
-          set_times: resizeSetTimes(entry.set_times ?? [[]], setsN, repsN),
-        });
-      }
-    }}
-    placeholder="Sets"
-    keyboardType="numeric"
-    placeholderTextColor={placeholderColor}
-    style={inputStyle}
-  />
+            <Text style={{ fontWeight: "700", color: c.text }}>Sets</Text>
 
-  <View style={{ flexDirection: "row", gap: 10 }}>
-    <PrimaryButton title="+ Set" onPress={() => (isLift ? addLiftSet(index) : addTrackSet(index))} />
-    <PrimaryButton title="- Set" onPress={() => (isLift ? removeLiftSet(index) : removeTrackSet(index))} />
-  </View>
-</View>
+            <TextInput
+              value={entry.sets}
+              onChangeText={(v) => {
+                if (isLift) {
+                  const setsN = Math.max(toPosInt(v), 1);
+                  patchEntry(index, {
+                    sets: v,
+                    lift_reps: resizeFlat(entry.lift_reps ?? [""], setsN),
+                    lift_weights: resizeFlat(entry.lift_weights ?? [""], setsN),
+                  });
+                } else {
+                  const setsN = Math.max(toPosInt(v), 1);
+                  const repsN = Math.max(toPosInt(entry.reps), 0);
+                  patchEntry(index, {
+                    sets: v,
+                    set_times: resizeSetTimes(entry.set_times ?? [[]], setsN, repsN),
+                  });
+                }
+              }}
+              placeholder="Sets"
+              keyboardType="numeric"
+              placeholderTextColor={placeholderColor}
+              style={inputStyle}
+            />
+
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <PrimaryButton title="+ Set" onPress={() => (isLift ? addLiftSet(index) : addTrackSet(index))} />
+              <PrimaryButton title="- Set" onPress={() => (isLift ? removeLiftSet(index) : removeTrackSet(index))} />
+            </View>
+          </View>
 
           {isLift ? (
-            <View style={{ gap: 10 }}>
-              <Text style={{ fontWeight: "800", color: c.text }}>Per-set log</Text>
+            <View style={{ gap: 12 }}>
+              <Text style={{ fontWeight: "800", color: c.text }}>Per-Set Log</Text>
 
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                {(entry.lift_reps ?? []).map((val, sIdx) => (
-                  <TextInput
-                    key={`r-${sIdx}`}
-                    value={val}
-                    onChangeText={(v) => updateLiftArray(index, "lift_reps", sIdx, v)}
-                    placeholder="Reps"
-                    keyboardType="numeric"
-                    placeholderTextColor={placeholderColor}
-                    style={[inputStyle, { flex: 1, textAlign: "center" }]}
-                  />
-                ))}
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontWeight: "700", color: c.text }}>Reps</Text>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {(entry.lift_reps ?? []).map((val, sIdx) => (
+                    <TextInput
+                      key={`r-${sIdx}`}
+                      value={val}
+                      onChangeText={(v) => updateLiftArray(index, "lift_reps", sIdx, v)}
+                      placeholder={`S${sIdx + 1}`}
+                      keyboardType="numeric"
+                      placeholderTextColor={placeholderColor}
+                      style={[inputStyle, { flex: 1, textAlign: "center" }]}
+                    />
+                  ))}
+                </View>
               </View>
 
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                {(entry.lift_weights ?? []).map((val, sIdx) => (
-                  <TextInput
-                    key={`w-${sIdx}`}
-                    value={val}
-                    onChangeText={(v) => updateLiftArray(index, "lift_weights", sIdx, v)}
-                    placeholder="Weight"
-                    keyboardType="numeric"
-                    placeholderTextColor={placeholderColor}
-                    style={[inputStyle, { flex: 1, textAlign: "center" }]}
-                  />
-                ))}
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontWeight: "700", color: c.text }}>Weight</Text>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {(entry.lift_weights ?? []).map((val, sIdx) => (
+                    <TextInput
+                      key={`w-${sIdx}`}
+                      value={val}
+                      onChangeText={(v) => updateLiftArray(index, "lift_weights", sIdx, v)}
+                      placeholder={`S${sIdx + 1}`}
+                      keyboardType="numeric"
+                      placeholderTextColor={placeholderColor}
+                      style={[inputStyle, { flex: 1, textAlign: "center" }]}
+                    />
+                  ))}
+                </View>
               </View>
             </View>
           ) : (
-            <View style={{ gap: 10 }}>
-              <TextInput
-                value={entry.reps}
-                onChangeText={(v) => patchEntry(index, { reps: v })}
-                placeholder="Reps"
-                keyboardType="numeric"
-                placeholderTextColor={placeholderColor}
-                style={inputStyle}
-              />
+            <View style={{ gap: 12 }}>
+              <View style={{ gap: 6 }}>
+                <Text style={{ fontWeight: "700", color: c.text }}>Reps</Text>
+                <TextInput
+                  value={entry.reps}
+                  onChangeText={(v) => {
+                    const repsN = Math.max(toPosInt(v), 0);
+                    const setsN = Math.max(toPosInt(entry.sets), 1);
+                    patchEntry(index, {
+                      reps: v,
+                      set_times: resizeSetTimes(entry.set_times ?? [[]], setsN, repsN),
+                    });
+                  }}
+                  placeholder="Reps"
+                  keyboardType="numeric"
+                  placeholderTextColor={placeholderColor}
+                  style={inputStyle}
+                />
+              </View>
 
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <PrimaryButton title="+ Rep" onPress={() => addTrackRep(index)} />
                 <PrimaryButton title="- Rep" onPress={() => removeTrackRep(index)} />
               </View>
 
-              {/* times toggle */}
-              <View style={{ flexDirection: "row", gap: 10 }}>
-                <Pressable
-                  onPress={() => {
-                    const setsN = Math.max(toPosInt(entry.sets), 1);
-                    const repsN = Math.max(toPosInt(entry.reps), 0);
-                    const prevTimes = Array.isArray(entry.set_times) ? entry.set_times : [[]];
-                    const rebuilt = resizeSetTimes(prevTimes, setsN, repsN);
-                    patchEntry(index, { timesApplicable: true, set_times: rebuilt });
-                  }}
-                  style={pillStyle(entry.timesApplicable)}
-                >
-                  <Text style={{ fontWeight: "800", color: entry.timesApplicable ? c.primaryText : c.text }}>
-                    Times Applicable
-                  </Text>
-                </Pressable>
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontWeight: "700", color: c.text }}>Times</Text>
 
-                <Pressable
-                  onPress={() => patchEntry(index, { timesApplicable: false, set_times: [[]] })}
-                  style={pillStyle(!entry.timesApplicable)}
-                >
-                  <Text style={{ fontWeight: "800", color: !entry.timesApplicable ? c.primaryText : c.text }}>
-                    Times Not Applicable
-                  </Text>
-                </Pressable>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <Pressable
+                    onPress={() => {
+                      const setsN = Math.max(toPosInt(entry.sets), 1);
+                      const repsN = Math.max(toPosInt(entry.reps), 0);
+                      const prevTimes = Array.isArray(entry.set_times) ? entry.set_times : [[]];
+                      const rebuilt = resizeSetTimes(prevTimes, setsN, repsN);
+                      patchEntry(index, { timesApplicable: true, set_times: rebuilt });
+                    }}
+                    style={pillStyle(entry.timesApplicable)}
+                  >
+                    <Text style={{ fontWeight: "700", color: entry.timesApplicable ? c.primaryText : c.text }}>
+                      Applicable
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => patchEntry(index, { timesApplicable: false, set_times: [[]] })}
+                    style={pillStyle(!entry.timesApplicable)}
+                  >
+                    <Text style={{ fontWeight: "700", color: !entry.timesApplicable ? c.primaryText : c.text }}>
+                      Not Applicable
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
 
               {entry.timesApplicable && (
@@ -815,7 +866,7 @@ export default function EditWorkout() {
 
                   {entry.set_times.map((row, sIdx) => (
                     <View key={sIdx} style={{ gap: 6 }}>
-                      <Text style={{ fontWeight: "800", color: c.text }}>Set {sIdx + 1}</Text>
+                      <Text style={{ fontWeight: "700", color: c.text }}>Set {sIdx + 1}</Text>
 
                       {row.map((t, repIdx) => (
                         <TextInput
@@ -836,30 +887,35 @@ export default function EditWorkout() {
                 </View>
               )}
 
-              <TextInput
-                value={entry.weight}
-                onChangeText={(v) => patchEntry(index, { weight: v })}
-                placeholder="Weight (optional)"
-                keyboardType="numeric"
-                placeholderTextColor={placeholderColor}
-                style={inputStyle}
-              />
+              <View style={{ gap: 6 }}>
+                <Text style={{ fontWeight: "700", color: c.text }}>Weight</Text>
+                <TextInput
+                  value={entry.weight}
+                  onChangeText={(v) => patchEntry(index, { weight: v })}
+                  placeholder="Weight (optional)"
+                  keyboardType="numeric"
+                  placeholderTextColor={placeholderColor}
+                  style={inputStyle}
+                />
+              </View>
             </View>
           )}
 
-          <TextInput
-            value={entry.notes}
-            onChangeText={(v) => patchEntry(index, { notes: v })}
-            placeholder="Entry notes (optional)"
-            placeholderTextColor={placeholderColor}
-            style={inputStyle}
-          />
+          <View style={{ gap: 6 }}>
+            <Text style={{ fontWeight: "700", color: c.text }}>Entry Notes</Text>
+            <TextInput
+              value={entry.notes}
+              onChangeText={(v) => patchEntry(index, { notes: v })}
+              placeholder="Entry notes (optional)"
+              placeholderTextColor={placeholderColor}
+              style={inputStyle}
+            />
+          </View>
         </View>
       ))}
 
-      <PrimaryButton title="Add entry" onPress={addEntry} />
+      <PrimaryButton title={isLift ? "Add another lift" : "Add another rep/drill"} onPress={addEntry} />
 
-      {/* Save button (dark-mode safe) */}
       <Pressable
         onPress={save}
         disabled={saving}
@@ -867,7 +923,7 @@ export default function EditWorkout() {
           borderWidth: 1,
           borderColor: c.border,
           backgroundColor: c.card,
-          borderRadius: 12,
+          borderRadius: 14,
           padding: 14,
           alignItems: "center",
           opacity: saving ? 0.6 : 1,
@@ -876,24 +932,12 @@ export default function EditWorkout() {
         {saving ? (
           <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
             <ActivityIndicator />
-            <Text style={{ fontSize: 16, fontWeight: "700", color: c.text }}>Saving…</Text>
+            <Text style={{ fontSize: 16, fontWeight: "600", color: c.text }}>Saving…</Text>
           </View>
         ) : (
-          <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>Save changes</Text>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: c.text }}>Save changes</Text>
         )}
       </Pressable>
-
-      <PrimaryButton
-        title="Cancel"
-        onPress={() => {
-          if (!isDirty) return router.back();
-
-          Alert.alert("Discard changes?", "You have unsaved changes.", [
-            { text: "Keep editing", style: "cancel" },
-            { text: "Discard", style: "destructive", onPress: () => router.back() },
-          ]);
-        }}
-      />
     </FormScreen>
   );
 }

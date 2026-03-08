@@ -126,12 +126,18 @@ export default function FriendsTab() {
 
       {/* Summary */}
       <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
-        <View style={{ ...pill, flex: 1 }}>
+        <Pressable
+          onPress={() => router.push("/friends/list")}
+          style={{ ...pill, flex: 1 }}
+        >
           <Text style={{ color: c.subtext, fontSize: 12 }}>Friends</Text>
           <Text style={{ color: c.text, fontWeight: "900", fontSize: 22 }}>
             {acceptedCount}
           </Text>
-        </View>
+          <Text style={{ color: c.subtext, marginTop: 2, fontSize: 12 }}>
+            Tap to view
+          </Text>
+        </Pressable>
 
         <Pressable
           onPress={() => router.push("/friends/requests")}

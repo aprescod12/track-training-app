@@ -12,6 +12,7 @@ import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
 import { supabase } from "../../lib/supabase";
 import FormScreen from "../../components/FormScreen";
 import { useAppColors } from "../../lib/theme";
+import { formatWorkoutType } from "../../lib/format";
 
 type EntrySetRow = {
   set_number: number;
@@ -728,29 +729,46 @@ export default function ExerciseHistoryScreen() {
       }}
     >
       {/* Header */}
-      <View style={{ gap: 6 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ fontSize: 22, fontWeight: "900", color: c.text }}>{exerciseName}</Text>
+<View style={{ gap: 6 }}>
+  <View
+    style={{
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: 12,
+    }}
+  >
+    <View style={{ flex: 1, minWidth: 0 }}>
+      <Text
+        numberOfLines={2}
+        style={{
+          fontSize: 22,
+          fontWeight: "900",
+          color: c.text,
+          flexShrink: 1,
+        }}
+      >
+        {exerciseName}
+      </Text>
+    </View>
 
-          <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
-            <Pressable
-              onPress={() => router.back()}
-              style={{
-                borderWidth: 1,
-                borderColor: c.border,
-                borderRadius: 999,
-                paddingVertical: 6,
-                paddingHorizontal: 14,
-                backgroundColor: c.card,
-              }}
-            >
-              <Text style={{ fontWeight: "600", color: c.text }}>Back</Text>
-            </Pressable>
-          </View>
-        </View>
+    <Pressable
+      onPress={() => router.back()}
+      style={{
+        borderWidth: 1,
+        borderColor: c.border,
+        borderRadius: 999,
+        paddingVertical: 6,
+        paddingHorizontal: 14,
+        backgroundColor: c.card,
+      }}
+    >
+      <Text style={{ fontWeight: "600", color: c.text }}>Back</Text>
+    </Pressable>
+  </View>
 
-        <Text style={{ color: c.subtext }}>{status}</Text>
-      </View>
+  <Text style={{ color: c.subtext }}>{status}</Text>
+</View>
 
       {/* Progress Insights */}
       <View
@@ -993,7 +1011,7 @@ export default function ExerciseHistoryScreen() {
               >
                 <Text style={{ fontWeight: "900", color: c.text }}>{formatPrettyDate(date)}</Text>
                 <Text style={{ color: c.subtext }}>
-                  {workoutType ? String(workoutType).toUpperCase() : ""} {workoutTitle ? `• ${workoutTitle}` : ""}
+                  {formatWorkoutType(workoutType)} {workoutTitle ? ` • ${workoutTitle}` : ""}
                 </Text>
 
                 <ScrollView
