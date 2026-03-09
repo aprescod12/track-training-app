@@ -67,6 +67,7 @@ export default function WorkoutDetail() {
 
   const [item, setItem] = useState<Workout | null>(null);
   const [status, setStatus] = useState("Loading...");
+  const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -74,7 +75,7 @@ export default function WorkoutDetail() {
 
   const load = useCallback(async () => {
     if (!workoutId) return;
-    setStatus("Loading...");
+    setError(null);
 
     const { data, error } = await supabase
       .from("workouts")
@@ -104,13 +105,12 @@ export default function WorkoutDetail() {
       .single();
 
     if (error) {
-      setStatus("Error: " + error.message);
+      setError("Error: " + error.message);
       setItem(null);
       return;
     }
 
     setItem(data as any);
-    setStatus("Loaded ✅");
   }, [workoutId]);
 
   useEffect(() => {
@@ -184,7 +184,11 @@ export default function WorkoutDetail() {
       <FormScreen edges={["left", "right"]}>
         <View style={{ gap: 4 }}>
           <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Workout</Text>
-          <Text style={{ color: c.subtext }}>{status}</Text>
+          {error && (
+            <Text style={{ color: "#ef4444", fontWeight: "600" }}>
+              {error}
+            </Text>
+          )}
         </View>
 
         {item && (

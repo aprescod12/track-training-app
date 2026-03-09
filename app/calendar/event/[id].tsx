@@ -51,25 +51,26 @@ export default function EventDetailScreen() {
 
   const [event, setEvent] = useState<CalendarEvent | null>(null);
   const [status, setStatus] = useState("Loading...");
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!eventId) {
-      setStatus("Missing event id");
+      setError("Missing event id");
       setEvent(null);
       return;
     }
 
     setLoading(true);
-    setStatus("Loading...");
+    setError(null);
 
     const { data: userRes, error: userErr } = await supabase.auth.getUser();
     const uid = userRes.user?.id ?? null;
 
     if (userErr || !uid) {
-      setStatus("Not logged in");
+      setError("Not logged in");
       setEvent(null);
       setLoading(false);
       return;
@@ -83,14 +84,13 @@ export default function EventDetailScreen() {
       .single();
 
     if (error) {
-      setStatus("Error: " + error.message);
+      setError("Error: " + error.message);
       setEvent(null);
       setLoading(false);
       return;
     }
 
     setEvent(data as CalendarEvent);
-    setStatus("Loaded ✅");
     setLoading(false);
   }, [eventId]);
 
@@ -147,6 +147,11 @@ export default function EventDetailScreen() {
       <View style={{ gap: 4 }}>
         <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Event</Text>
         <Text style={{ color: c.subtext }}>{status}</Text>
+        {error && (
+            <Text style={{ color: "#ef4444", fontWeight: "600" }}>
+                {error}
+            </Text>
+        )}
       </View>
 
       {loading && (

@@ -38,7 +38,7 @@ export default function FriendProfileScreen() {
       : undefined;
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
-  const [status, setStatus] = useState("Loading...");
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [stats, setStats] = useState({
@@ -81,13 +81,13 @@ export default function FriendProfileScreen() {
   const load = useCallback(async () => {
     if (!friendId) {
       setProfile(null);
-      setStatus("Missing friend id");
+      setError("Missing friend id");
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    setStatus("Loading...");
+    setError(null);
 
     const { data, error } = await supabase
       .from("profiles")
@@ -108,20 +108,19 @@ export default function FriendProfileScreen() {
 
     if (error) {
       setProfile(null);
-      setStatus("Error: " + error.message);
+      setError("Error: " + error.message);
       setLoading(false);
       return;
     }
 
     if (!data) {
       setProfile(null);
-      setStatus("Profile not found");
+      setError("Profile not found");
       setLoading(false);
       return;
     }
 
     setProfile(data as ProfileRow);
-    setStatus("Loaded ✅");
     setLoading(false);
   }, [friendId]);
 
@@ -222,7 +221,7 @@ export default function FriendProfileScreen() {
       const { error } = await supabase.from("friendships").delete().eq("id", friendshipId);
 
       if (error) {
-        setStatus("Error: " + error.message);
+        setError("Error: " + error.message);
         return;
       }
 
@@ -243,7 +242,11 @@ export default function FriendProfileScreen() {
           </Pressable>
         </View>
 
-        <Text style={{ color: c.subtext, marginTop: 4 }}>{status}</Text>
+        {error && (
+  <Text style={{ color: "red", fontWeight: "600" }}>
+    {error}
+  </Text>
+)}
 
         {loading && (
           <View style={{ marginTop: 14, flexDirection: "row", alignItems: "center", gap: 10 }}>

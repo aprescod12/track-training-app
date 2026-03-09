@@ -33,7 +33,7 @@ export default function WorkoutsScreen() {
   const { width } = useWindowDimensions();
 
   const [items, setItems] = useState<Workout[]>([]);
-  const [status, setStatus] = useState("Loading...");
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<FilterKey>("all");
 
@@ -41,13 +41,13 @@ export default function WorkoutsScreen() {
   const todayKey = useMemo(() => formatYMD(today), [today]);
 
   const load = useCallback(async () => {
-    setStatus("Loading...");
+    setError(null);
 
     const { data: userRes, error: userErr } = await supabase.auth.getUser();
     const uid = userRes.user?.id ?? null;
 
     if (userErr || !uid) {
-      setStatus("Not logged in");
+      setError("Not logged in");
       setItems([]);
       return;
     }
@@ -61,14 +61,13 @@ export default function WorkoutsScreen() {
       .limit(60);
 
     if (error) {
-      setStatus("Error: " + error.message);
+      setError("Error: " + error.message);
       setItems([]);
       return;
     }
 
     const rows = (data ?? []) as Workout[];
     setItems(rows);
-    setStatus(rows.length ? "Loaded ✅" : "No workouts yet");
   }, []);
 
   useFocusEffect(
@@ -134,7 +133,11 @@ export default function WorkoutsScreen() {
         <PrimaryButton title="Log workout" onPress={() => router.push("/modal")} />
       </View>
 
-      <Text style={{ color: c.subtext }}>{status}</Text>
+      {error && (
+        <Text style={{ color: "#ef4444", fontWeight: "600" }}>
+          {error}
+        </Text>
+      )}
 
       {/* Today */}
       <View

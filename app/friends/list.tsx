@@ -34,9 +34,10 @@ export default function FriendsListScreen() {
   const c = useAppColors();
 
   const [rows, setRows] = useState<FriendListRow[]>([]);
-  const [status, setStatus] = useState("Loading...");
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [confirmUnfriend, setConfirmUnfriend] = useState<{
     open: boolean;
@@ -76,14 +77,14 @@ export default function FriendsListScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    setStatus("Loading...");
+    setError(null);
 
     const { data: userRes, error: userErr } = await supabase.auth.getUser();
     const myId = userRes.user?.id ?? null;
 
     if (userErr || !myId) {
       setRows([]);
-      setStatus("Not logged in");
+      setError("Not logged in");
       setLoading(false);
       return;
     }
@@ -97,7 +98,7 @@ export default function FriendsListScreen() {
 
     if (error) {
       setRows([]);
-      setStatus("Error: " + error.message);
+      setError("Error: " + error.message);
       setLoading(false);
       return;
     }
@@ -107,7 +108,7 @@ export default function FriendsListScreen() {
 
     if (friendIds.length === 0) {
       setRows([]);
-      setStatus("No friends yet");
+      setError("No friends yet");
       setLoading(false);
       return;
     }
@@ -119,7 +120,7 @@ export default function FriendsListScreen() {
 
     if (pErr) {
       setRows([]);
-      setStatus("Error: " + pErr.message);
+      setError("Error: " + pErr.message);
       setLoading(false);
       return;
     }
@@ -139,7 +140,6 @@ export default function FriendsListScreen() {
     });
 
     setRows(nextRows);
-    setStatus(nextRows.length ? "Loaded ✅" : "No friends yet");
     setLoading(false);
   }, []);
 
@@ -160,12 +160,11 @@ export default function FriendsListScreen() {
       const { error } = await supabase.from("friendships").delete().eq("id", friendshipId);
 
       if (error) {
-        setStatus("Error: " + error.message);
+        setError("Error: " + error.message);
         return;
       }
 
       setRows((prev) => prev.filter((r) => r.friendshipId !== friendshipId));
-      setStatus("Loaded ✅");
     } finally {
       setBusyId(null);
     }
@@ -181,9 +180,20 @@ export default function FriendsListScreen() {
     });
   }
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
   return (
     <>
-      <FormScreen>
+      <FormScreen
+        refreshControlProps={{
+            refreshing,
+            onRefresh,
+          }}
+      >
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Friends</Text>
 
@@ -192,7 +202,11 @@ export default function FriendsListScreen() {
           </Pressable>
         </View>
 
-        <Text style={{ color: c.subtext, marginTop: 4 }}>{status}</Text>
+        {error && (
+            <Text style={{ color: "#ef4444", fontWeight: "600" }}>
+                {error}
+            </Text>
+        )}
 
         {loading && (
           <View style={{ marginTop: 14, flexDirection: "row", alignItems: "center", gap: 10 }}>

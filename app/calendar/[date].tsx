@@ -60,7 +60,7 @@ export default function CalendarDayScreen() {
   const { date } = useLocalSearchParams<{ date: string }>();
   const day = typeof date === "string" ? date : "";
 
-  const [status, setStatus] = useState("Loading...");
+  const [error, setError] = useState<string | null>(null);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -70,13 +70,13 @@ export default function CalendarDayScreen() {
     if (!day) return;
 
     setLoading(true);
-    setStatus("Loading...");
+    setError(null);
 
     const { data: userRes, error: userErr } = await supabase.auth.getUser();
     const uid = userRes.user?.id ?? null;
 
     if (userErr || !uid) {
-      setStatus("Not logged in");
+      setError("Not logged in");
       setWorkouts([]);
       setEvents([]);
       setLoading(false);
@@ -119,7 +119,7 @@ export default function CalendarDayScreen() {
     ]);
 
     if (workoutsRes.error) {
-      setStatus("Error: " + workoutsRes.error.message);
+      setError("Error: " + workoutsRes.error.message);
       setWorkouts([]);
       setEvents([]);
       setLoading(false);
@@ -127,7 +127,7 @@ export default function CalendarDayScreen() {
     }
 
     if (eventsRes.error) {
-      setStatus("Error: " + eventsRes.error.message);
+      setError("Error: " + eventsRes.error.message);
       setWorkouts([]);
       setEvents([]);
       setLoading(false);
@@ -136,7 +136,6 @@ export default function CalendarDayScreen() {
 
     setWorkouts((workoutsRes.data as any) ?? []);
     setEvents((eventsRes.data as CalendarEvent[]) ?? []);
-    setStatus("Loaded ✅");
     setLoading(false);
   }, [day]);
 
@@ -163,7 +162,11 @@ export default function CalendarDayScreen() {
         <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>
           {day ? formatPrettyDate(day) : "Selected Day"}
         </Text>
-        <Text style={{ color: c.subtext }}>{status}</Text>
+        {error && (
+          <Text style={{ color: "#ef4444", fontWeight: "600" }}>
+            {error}
+          </Text>
+        )}
       </View>
 
       {loading && (

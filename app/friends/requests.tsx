@@ -32,6 +32,7 @@ export default function FriendRequestsScreen() {
   const [status, setStatus] = useState("Loading...");
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const pill = useMemo(
     () => ({
@@ -160,8 +161,19 @@ export default function FriendRequestsScreen() {
     [load]
   );
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
   return (
-    <FormScreen>
+    <FormScreen
+    refreshControlProps={{
+      refreshing,
+      onRefresh,
+    }}
+    >
       <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Requests</Text>
       <Text style={{ color: c.subtext, marginTop: 4 }}>{status}</Text>
 

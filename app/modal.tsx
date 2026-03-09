@@ -13,7 +13,11 @@ import PrimaryButton from "../components/PrimaryButton";
 import FormScreen from "../components/FormScreen";
 import { supabase } from "../lib/supabase";
 import { formatYMD } from "../lib/date";
-import { getOrCreateExerciseId } from "../lib/exercises";
+import {
+  findExerciseIdByName,
+  searchExercisesByName,
+  createCustomExercise,
+} from "../lib/exercises";
 import { useAppColors } from "../lib/theme";
 import { computeNewPRsForWorkout, upsertExercisePRs } from "../lib/pr";
 import {
@@ -28,6 +32,14 @@ type ToastState = { open: boolean; message: string };
 
 type EntryDraft = {
   exercise: string;
+
+  // new
+  selectedExerciseId?: string | null;
+  pendingCustomExercise?: {
+    name: string;
+    category: "track" | "lift" | "other";
+    score_type: "max_weight" | "min_time" | "max_reps";
+  } | null;
 
   // shared
   sets: string;
@@ -45,6 +57,15 @@ type EntryDraft = {
 
   // optional track-only weight (sled/medball/etc.)
   weight: string;
+};
+
+type ExerciseSearchResult = {
+  exercise_id: string;
+  name: string;
+  category: string | null;
+  distance_m: number | null;
+  score_type: string | null;
+  created_by: string | null;
 };
 
 function buildEntrySetsFromTrack(entryId: string, setTimes: string[][] | null) {
@@ -122,6 +143,8 @@ function resizeSetTimes(prev: string[][], setsN: number, repsN: number) {
 function makeBlankEntry(): EntryDraft {
   return {
     exercise: "",
+    selectedExerciseId: null,
+    pendingCustomExercise: null,
     sets: "",
     notes: "",
     reps: "",
@@ -162,6 +185,12 @@ export default function ModalScreen() {
 
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const searchTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  const [exerciseSuggestions, setExerciseSuggestions] = useState<
+    Record<number, ExerciseSearchResult[]>
+  >({}); 
 
   const [toast, setToast] = useState<ToastState>({
     open: false,
@@ -283,6 +312,16 @@ export default function ModalScreen() {
       const copy = prev.filter((_, i) => i !== index);
       return copy.length ? copy : [makeBlankEntry()];
     });
+  
+    setExerciseSuggestions((prev) => {
+      const next: Record<number, ExerciseSearchResult[]> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const key = Number(k);
+        if (key < index) next[key] = v;
+        else if (key > index) next[key - 1] = v;
+      });
+      return next;
+    });
   }
 
   function updateEntryField(index: number, patch: Partial<EntryDraft>) {
@@ -339,6 +378,49 @@ export default function ModalScreen() {
     });
   }
 
+  function loadExerciseSuggestions(index: number, query: string) {
+    const cleaned = query.trim();
+  
+    if (searchTimers.current[index]) {
+      clearTimeout(searchTimers.current[index]);
+    }
+  
+    searchTimers.current[index] = setTimeout(async () => {
+      if (!cleaned) {
+        setExerciseSuggestions((prev) => ({ ...prev, [index]: [] }));
+        return;
+      }
+  
+      try {
+        const results = await searchExercisesByName(cleaned);
+        setExerciseSuggestions((prev) => ({ ...prev, [index]: results }));
+      } catch (err) {
+        console.log("Exercise suggestion error:", err);
+        setExerciseSuggestions((prev) => ({ ...prev, [index]: [] }));
+      }
+    }, 300);
+  }
+
+  function createExerciseFromInput(index: number) {
+    const name = entries[index].exercise.trim();
+    if (!name) return;
+  
+    const category = workoutType === "lift" ? "lift" : "track";
+    const score_type = workoutType === "lift" ? "max_weight" : "min_time";
+  
+    updateEntryField(index, {
+      exercise: name,
+      selectedExerciseId: null,
+      pendingCustomExercise: {
+        name,
+        category,
+        score_type,
+      },
+    });
+  
+    setExerciseSuggestions((prev) => ({ ...prev, [index]: [] }));
+  }
+
   async function saveWorkout() {
     try {
       setSaving(true);
@@ -378,11 +460,13 @@ export default function ModalScreen() {
 
             return {
               exercise: e.exercise.trim() || null,
+              selectedExerciseId: e.selectedExerciseId ?? null,
+              pendingCustomExercise: e.pendingCustomExercise ?? null,
               sets: setsN,
               lift_reps,
               lift_weights,
               notes: e.notes.trim() || null,
-            };
+};
           } else {
             const repsN = toPosInt(e.reps);
             const prevTimes = Array.isArray(e.set_times) ? e.set_times : [[]];
@@ -392,6 +476,8 @@ export default function ModalScreen() {
 
             return {
               exercise: e.exercise.trim() || null,
+              selectedExerciseId: e.selectedExerciseId ?? null,
+              pendingCustomExercise: e.pendingCustomExercise ?? null,
               sets: setsN,
               reps: repsN || null,
               set_times,
@@ -405,14 +491,34 @@ export default function ModalScreen() {
       const payload: any[] = [];
 
       for (const e of cleanedEntries) {
-        const exId = await getOrCreateExerciseId(e.exercise ?? "");
-        if (!exId) continue;
-
+        let exId: string | null = null;
+      
+        if (e.selectedExerciseId) {
+          exId = e.selectedExerciseId;
+        } else if (e.pendingCustomExercise) {
+          exId = await createCustomExercise({
+            name: e.pendingCustomExercise.name,
+            category: e.pendingCustomExercise.category,
+            score_type: e.pendingCustomExercise.score_type,
+            created_by: uid,
+          });
+        } else {
+          exId = await findExerciseIdByName(e.exercise ?? "");
+        }
+      
+        if (!exId) {
+          throw new Error(
+            `Exercise "${e.exercise}" was not found. Please select an existing exercise or create a custom one.`
+          );
+        }
+      
+        const { selectedExerciseId, pendingCustomExercise, ...entryData } = e as any;
+      
         payload.push({
           user_id: uid,
           workout_id: workout.id,
           exercise_id: exId,
-          ...e,
+          ...entryData,
         });
       }
 
@@ -640,15 +746,93 @@ export default function ModalScreen() {
             </View>
 
             <View style={{ gap: 6 }}>
-              <Text style={{ fontWeight: "700", color: c.text }}>Exercise</Text>
-              <TextInput
-                value={entry.exercise}
-                onChangeText={(v) => updateEntryField(index, { exercise: v })}
-                placeholder={isLift ? "Bench Press" : "4x30m blocks"}
-                placeholderTextColor={placeholderColor}
-                style={inputStyle}
-              />
-            </View>
+  <Text style={{ fontWeight: "700", color: c.text }}>Exercise</Text>
+  <TextInput
+    value={entry.exercise}
+    onChangeText={(v) => {
+      updateEntryField(index, {
+        exercise: v,
+        selectedExerciseId: null,
+        pendingCustomExercise: null,
+      });
+      loadExerciseSuggestions(index, v);
+    }}
+    placeholder={isLift ? "Bench Press" : "200m"}
+    placeholderTextColor={placeholderColor}
+    style={inputStyle}
+  />
+
+  <Text style={{ color: c.subtext, fontSize: 12 }}>
+    Choose an existing exercise below when possible.
+  </Text>
+
+  {entry.pendingCustomExercise && (
+  <Text style={{ color: c.subtext, fontSize: 12 }}>
+    Will create custom exercise on save.
+  </Text>
+)}
+
+  {(() => {
+    const suggestions = exerciseSuggestions[index] ?? [];
+    const exactMatch = suggestions.some(
+      (s) => s.name.toLowerCase() === entry.exercise.trim().toLowerCase()
+    );
+
+    if (suggestions.length === 0 && !entry.exercise.trim()) return null;
+
+    return (
+      <View
+        style={{
+          borderWidth: 1,
+          borderColor: c.border,
+          borderRadius: 12,
+          backgroundColor: c.bg,
+          overflow: "hidden",
+        }}
+      >
+        {suggestions.map((item) => (
+          <Pressable
+            key={item.exercise_id}
+            onPress={() => {
+              updateEntryField(index, {
+                exercise: item.name,
+                selectedExerciseId: item.exercise_id,
+                pendingCustomExercise: null,
+              });
+              setExerciseSuggestions((prev) => ({ ...prev, [index]: [] }));
+            }}
+            style={{
+              paddingVertical: 10,
+              paddingHorizontal: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: c.border,
+            }}
+          >
+            <Text style={{ color: c.text, fontWeight: "700" }}>{item.name}</Text>
+            <Text style={{ color: c.subtext, fontSize: 12 }}>
+              {item.category ?? "other"}
+            </Text>
+          </Pressable>
+        ))}
+
+        {!exactMatch && entry.exercise.trim() !== "" && (
+          <Pressable
+            onPress={() => createExerciseFromInput(index)}
+            style={{
+              paddingVertical: 10,
+              paddingHorizontal: 12,
+              backgroundColor: c.card,
+            }}
+          >
+            <Text style={{ color: c.primary, fontWeight: "700" }}>
+              Create "{entry.exercise.trim()}"
+            </Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  })()}
+</View>
 
             <View style={{ gap: 6 }}>
               <Text style={{ fontWeight: "700", color: c.text }}>Sets</Text>

@@ -5,9 +5,9 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Alert,
+  Modal,
 } from "react-native";
-import { useLocalSearchParams, router } from "expo-router";
+import { useLocalSearchParams, router, Stack } from "expo-router";
 import PrimaryButton from "../../../components/PrimaryButton";
 import FormScreen from "../../../components/FormScreen";
 import { supabase } from "../../../lib/supabase";
@@ -165,6 +165,14 @@ export default function EditWorkout() {
   const [entries, setEntries] = useState<EntryDraft[]>([]);
   const [deletedEntryIds, setDeletedEntryIds] = useState<string[]>([]);
 
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [allowExit, setAllowExit] = useState(false);
+
+  const [initialSnapshot, setInitialSnapshot] = useState<string>("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<any | null>(null);
+
   useEffect(() => {
     setEntries((prev) => {
       if (!prev.length) return prev;
@@ -196,11 +204,6 @@ export default function EditWorkout() {
     });
   }, [workoutType]);
 
-  const [status, setStatus] = useState("Loading...");
-  const [saving, setSaving] = useState(false);
-
-  const [initialSnapshot, setInitialSnapshot] = useState<string>("");
-
   const isDirty = useMemo(() => {
     if (!initialSnapshot) return false;
     const now = JSON.stringify({ title, notes, workoutType, entries, deletedEntryIds });
@@ -209,22 +212,19 @@ export default function EditWorkout() {
 
   useEffect(() => {
     const sub = navigation.addListener("beforeRemove", (e: any) => {
-      if (!isDirty || saving) return;
-
+      if (allowExit || !isDirty || saving) return;
+  
       e.preventDefault();
-
-      Alert.alert("Discard changes?", "You have unsaved changes.", [
-        { text: "Keep editing", style: "cancel" },
-        { text: "Discard", style: "destructive", onPress: () => navigation.dispatch(e.data.action) },
-      ]);
+      setPendingAction(e.data.action);
+      setConfirmOpen(true);
     });
-
+  
     return sub as any;
-  }, [navigation, isDirty, saving]);
+  }, [navigation, isDirty, saving, allowExit]);
 
   const load = useCallback(async () => {
     if (!id) return;
-    setStatus("Loading...");
+    setError(null);
 
     const { data, error } = await supabase
       .from("workouts")
@@ -252,7 +252,7 @@ export default function EditWorkout() {
       .single();
 
     if (error) {
-      setStatus("Error: " + error.message);
+      setError(error.message);
       return;
     }
 
@@ -294,8 +294,6 @@ export default function EditWorkout() {
     setEntries(finalEntries);
     setDeletedEntryIds([]);
 
-    setStatus("Ready ✅");
-
     const snap = JSON.stringify({
       title: row.title ?? "",
       notes: row.notes ?? "",
@@ -309,6 +307,38 @@ export default function EditWorkout() {
   useEffect(() => {
     load();
   }, [load]);
+
+  function closeConfirm() {
+    setConfirmOpen(false);
+    setPendingAction(null);
+  }
+
+  function discardChanges() {
+    setConfirmOpen(false);
+    setAllowExit(true);
+  
+    if (pendingAction?.type === "GO_BACK") {
+      setPendingAction(null);
+      router.back();
+      return;
+    }
+  
+    if (pendingAction) {
+      const action = pendingAction;
+      setPendingAction(null);
+      navigation.dispatch(action);
+      return;
+    }
+  
+    router.back();
+  }
+
+  useEffect(() => {
+    if (!allowExit) return;
+  
+    const id = setTimeout(() => setAllowExit(false), 0);
+    return () => clearTimeout(id);
+  }, [allowExit]);
 
   function addEntry() {
     setEntries((prev) => [...prev, makeBlankEntry()]);
@@ -433,7 +463,7 @@ export default function EditWorkout() {
 
     try {
       setSaving(true);
-      setStatus("Saving...");
+      setError(null);
 
       const trimmedTitle = title.trim() || "Workout";
 
@@ -583,7 +613,6 @@ export default function EditWorkout() {
         }
       }
 
-      setStatus("Saved ✅");
       setDeletedEntryIds([]);
 
       const snap = JSON.stringify({
@@ -597,7 +626,7 @@ export default function EditWorkout() {
 
       router.back();
     } catch (e: any) {
-      setStatus("Error: " + (e?.message ?? String(e)));
+      setError(e?.message ?? String(e));
     } finally {
       setSaving(false);
     }
@@ -615,6 +644,16 @@ export default function EditWorkout() {
 
   return (
     <FormScreen edges={["left", "right"]} contentContainerStyle={{ paddingBottom: 28 }}>
+      <Stack.Screen
+        options={{
+          title: "Edit Workout",
+          headerShown: true,
+          headerStyle: { backgroundColor: c.bg },
+          headerTintColor: c.text,
+          contentStyle: { backgroundColor: c.bg },
+        }}
+      />
+
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Edit Workout</Text>
@@ -625,12 +664,13 @@ export default function EditWorkout() {
 
         <Pressable
           onPress={() => {
-            if (!isDirty) return router.back();
+            if (!isDirty) {
+              router.back();
+              return;
+            }
 
-            Alert.alert("Discard changes?", "You have unsaved changes.", [
-              { text: "Keep editing", style: "cancel" },
-              { text: "Discard", style: "destructive", onPress: () => router.back() },
-            ]);
+            setPendingAction({ type: "GO_BACK" });
+            setConfirmOpen(true);
           }}
           style={{
             borderWidth: 1,
@@ -645,7 +685,11 @@ export default function EditWorkout() {
         </Pressable>
       </View>
 
-      <Text style={{ color: c.subtext }}>{status}</Text>
+      {error && (
+        <Text style={{ color: "#ef4444", fontWeight: "600" }}>
+          {error}
+        </Text>
+      )}
 
       <View
         style={{
@@ -938,6 +982,69 @@ export default function EditWorkout() {
           <Text style={{ fontSize: 16, fontWeight: "700", color: c.text }}>Save changes</Text>
         )}
       </Pressable>
+
+      <Modal visible={confirmOpen} transparent animationType="fade">
+        <Pressable
+          onPress={closeConfirm}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.35)",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 20,
+          }}
+        >
+          <Pressable
+            onPress={() => {}}
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              backgroundColor: c.card,
+              borderWidth: 1,
+              borderColor: c.border,
+              borderRadius: 16,
+              padding: 18,
+              gap: 14,
+            }}
+          >
+            <Text style={{ fontSize: 18, fontWeight: "800", color: c.text }}>
+              Discard changes?
+            </Text>
+
+            <Text style={{ color: c.subtext }}>
+              You have unsaved changes. Are you sure you want to leave this screen?
+            </Text>
+
+            <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 10 }}>
+              <Pressable
+                onPress={closeConfirm}
+                style={{
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  backgroundColor: c.bg,
+                }}
+              >
+                <Text style={{ color: c.text, fontWeight: "700" }}>Keep editing</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={discardChanges}
+                style={{
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  borderRadius: 10,
+                  backgroundColor: "#DC2626",
+                }}
+              >
+                <Text style={{ color: "white", fontWeight: "700" }}>Discard</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </FormScreen>
   );
 }

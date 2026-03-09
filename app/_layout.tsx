@@ -77,6 +77,66 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: c.bg },
           }}
         />
+
+        <Stack.Screen
+          name="profile/lift-stats"
+          options={{
+            presentation: "modal",
+            title: "Lift Stats",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
+
+        <Stack.Screen
+          name="profile/track-stats"
+          options={{
+            presentation: "modal",
+            title: "Track Stats",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
+
+        <Stack.Screen
+          name="profile/overview"
+          options={{
+            presentation: "modal",
+            title: "Overview",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
+
+        <Stack.Screen
+          name="profile/training-hub"
+          options={{
+            presentation: "modal",
+            title: "Training Hub",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
+
+        <Stack.Screen
+          name="profile-edit"
+          options={{
+            presentation: "modal",
+            title: "Edit Profile",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
       </Stack>
 
       <StatusBar style={c.dark ? "light" : "dark"} />

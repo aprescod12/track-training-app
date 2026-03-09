@@ -24,7 +24,7 @@ type AchievementRow = {
   created_at: string;
   exercises?: {
     name: string | null;
-  } | null;
+  }[] | null;
 };
 
 type ProfileRow = {
@@ -55,10 +55,11 @@ function firstName(fullName: string | null | undefined, username: string | null 
 export default function FriendsFeedScreen() {
   const c = useAppColors();
 
-  const [status, setStatus] = useState("Loading...");
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<AchievementRow[]>([]);
   const [profilesById, setProfilesById] = useState<Record<string, ProfileRow>>({});
+  const [refreshing, setRefreshing] = useState(false);
 
   const card = useMemo(
     () => ({
@@ -74,7 +75,7 @@ export default function FriendsFeedScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    setStatus("Loading...");
+    setError(null);
 
     const { data: userRes, error: userErr } = await supabase.auth.getUser();
     const myId = userRes.user?.id ?? null;
@@ -82,7 +83,7 @@ export default function FriendsFeedScreen() {
     if (userErr || !myId) {
       setRows([]);
       setProfilesById({});
-      setStatus("Not logged in");
+      setError("Not logged in");
       setLoading(false);
       return;
     }
@@ -96,7 +97,7 @@ export default function FriendsFeedScreen() {
     if (frErr) {
       setRows([]);
       setProfilesById({});
-      setStatus("Error: " + frErr.message);
+      setError("Error: " + frErr.message);
       setLoading(false);
       return;
     }
@@ -108,7 +109,7 @@ export default function FriendsFeedScreen() {
     if (friendIds.length === 0) {
       setRows([]);
       setProfilesById({});
-      setStatus("No friends yet");
+      setError("No friends yet");
       setLoading(false);
       return;
     }
@@ -146,7 +147,7 @@ export default function FriendsFeedScreen() {
     if (error) {
       setRows([]);
       setProfilesById({});
-      setStatus("Error: " + error.message);
+      setError("Error: " + error.message);
       setLoading(false);
       return;
     }
@@ -164,7 +165,6 @@ export default function FriendsFeedScreen() {
 
       if (pErr) {
         setProfilesById({});
-        setStatus(achRows.length ? "Loaded ✅" : "No achievements yet");
         setLoading(false);
         return;
       }
@@ -178,7 +178,6 @@ export default function FriendsFeedScreen() {
       setProfilesById({});
     }
 
-    setStatus(achRows.length ? "Loaded ✅" : "No achievements yet");
     setLoading(false);
   }, []);
 
@@ -188,10 +187,26 @@ export default function FriendsFeedScreen() {
     }, [load])
   );
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
   return (
-    <FormScreen>
+    <FormScreen
+        refreshControlProps={{
+        refreshing,
+        onRefresh,
+      }}
+    >
       <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Friends Feed</Text>
-      <Text style={{ color: c.subtext, marginTop: 4 }}>{status}</Text>
+      
+      {error && (
+        <Text style={{ color: "#ef4444", fontWeight: "600" }}>
+            {error}
+        </Text>
+       )}
 
       {loading && (
         <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -204,7 +219,7 @@ export default function FriendsFeedScreen() {
         {rows.map((row) => {
           const p = profilesById[row.user_id];
           const name = firstName(p?.full_name, p?.username);
-          const exerciseName = row.exercises?.name ?? "exercise";
+          const exerciseName = row.exercises?.[0]?.name ?? "exercise";
 
           let headline = "";
           let subtext = row.value_text ?? "";

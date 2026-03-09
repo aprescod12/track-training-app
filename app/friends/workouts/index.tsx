@@ -32,7 +32,7 @@ type WorkoutRow = {
     full_name: string | null;
     school: string | null;
     team: string | null;
-  } | null;
+  }[] | null;
 
   workout_entries?: { id: string }[];
 };
@@ -81,7 +81,7 @@ export default function FriendsWorkoutsScreen() {
   const { width } = useWindowDimensions();
 
   const [days, setDays] = useState(7);
-  const [status, setStatus] = useState("Loading...");
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<WorkoutRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -106,14 +106,14 @@ export default function FriendsWorkoutsScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    setStatus("Loading...");
+    setError(null);
 
     const { data: userRes, error: userErr } = await supabase.auth.getUser();
     const myId = userRes.user?.id ?? null;
 
     if (userErr || !myId) {
       setRows([]);
-      setStatus("Not logged in");
+      setError("Not logged in");
       setLoading(false);
       return;
     }
@@ -126,7 +126,7 @@ export default function FriendsWorkoutsScreen() {
 
     if (frErr) {
       setRows([]);
-      setStatus("Error: " + frErr.message);
+      setError("Error: " + frErr.message);
       setLoading(false);
       return;
     }
@@ -137,7 +137,7 @@ export default function FriendsWorkoutsScreen() {
 
     if (friendIds.length === 0) {
       setRows([]);
-      setStatus("No friends yet");
+      setError("No friends yet");
       setLoading(false);
       return;
     }
@@ -173,14 +173,13 @@ export default function FriendsWorkoutsScreen() {
 
     if (error) {
       setRows([]);
-      setStatus("Error: " + error.message);
+      setError("Error: " + error.message);
       setLoading(false);
       return;
     }
 
     const out = (data ?? []) as WorkoutRow[];
     setRows(out);
-    setStatus(out.length ? "Loaded ✅" : "No recent workouts");
     setLoading(false);
   }, [days]);
 
@@ -201,7 +200,7 @@ export default function FriendsWorkoutsScreen() {
 
   const renderWorkout = useCallback(
     (w: WorkoutRow) => {
-        const name = w.profiles?.full_name ?? "Unknown";
+        const name = w.profiles?.[0]?.full_name ?? "Unknown";
         const subtitle = formatWorkoutType(w.workout_type);
         const entryCount = w.workout_entries?.length ?? 0;
 
@@ -256,7 +255,12 @@ export default function FriendsWorkoutsScreen() {
       }}
     >
       <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Friends Workouts</Text>
-      <Text style={{ color: c.subtext, marginTop: 4 }}>{status}</Text>
+      
+      {error && (
+        <Text style={{ color: "#ef4444", fontWeight: "600" }}>
+            {error}
+        </Text>
+      )}
 
             {/* Range selector */}
             <View style={{ gap: 10, marginTop: 12 }}>

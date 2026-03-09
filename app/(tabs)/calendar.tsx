@@ -77,7 +77,7 @@ export default function CalendarScreen() {
   const [monthEvents, setMonthEvents] = useState<EventRow[]>([]);
   const [selectedDayEvents, setSelectedDayEvents] = useState<EventRow[]>([]);
 
-  const [status, setStatus] = useState("Loading...");
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const monthLabel = useMemo(
@@ -110,13 +110,13 @@ export default function CalendarScreen() {
   const selectedKey = useMemo(() => formatYMD(selectedDate), [selectedDate]);
 
   const loadMonth = useCallback(async () => {
-    setStatus("Loading...");
+    setError(null);
 
     const { data: userData, error: userErr } = await supabase.auth.getUser();
     const uid = userData.user?.id ?? null;
 
     if (userErr || !uid) {
-      setStatus("Not logged in");
+      setError("Not logged in");
       setMonthWorkouts([]);
       setSelectedDayWorkouts([]);
       setMonthEvents([]);
@@ -137,7 +137,7 @@ export default function CalendarScreen() {
       .order("created_at", { ascending: false });
 
     if (wErr) {
-      setStatus("Error: " + wErr.message);
+      setError("Error: " + wErr.message);
       setMonthWorkouts([]);
       setSelectedDayWorkouts([]);
       setMonthEvents([]);
@@ -165,7 +165,6 @@ export default function CalendarScreen() {
     setSelectedDayWorkouts(wRows.filter((w) => w.workout_date === selectedKey));
     setSelectedDayEvents(eRows.filter((e) => ymdLocal(e.starts_at) === selectedKey));
 
-    setStatus("Loaded ✅");
   }, [monthAnchor, selectedKey]);
 
   useFocusEffect(
@@ -228,7 +227,11 @@ export default function CalendarScreen() {
         <PrimaryButton title="Add event" onPress={() => router.push(`/calendar/add-event?date=${selectedKey}`)} />
       </View>
 
-      <Text style={{ color: c.subtext }}>{status}</Text>
+      {error && (
+        <Text style={{ color: "#ef4444", fontWeight: "600" }}>
+          {error}
+        </Text>
+      )}
 
       <View
         {...panResponder.panHandlers}

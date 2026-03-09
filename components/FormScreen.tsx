@@ -9,6 +9,7 @@ type Props = {
   children: ReactNode;
   refreshControlProps?: RefreshControlProps;
   contentContainerStyle?: StyleProp<ViewStyle>;
+  scroll?: boolean;
   edges?: ("top" | "bottom" | "left" | "right")[]; // optional per-screen override
 
   // ✅ Optional: allows a screen to call scrollRef.current?.scrollTo(...)

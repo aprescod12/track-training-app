@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { Text, TextInput, Pressable, ActivityIndicator, Alert, View } from "react-native";
 import { Stack, router } from "expo-router";
-import FormScreen from "../../components/FormScreen";
-import { useAppColors } from "../../lib/theme";
-import { getMyProfile, updateMyProfile, Profile } from "../../lib/profile";
-import { supabase } from "../../lib/supabase";
-import { pickAndUploadAvatar } from "../../lib/avatar";
-import Avatar from "../../components/Avatar";
+import FormScreen from "../components/FormScreen";
+import { useAppColors } from "../lib/theme";
+import { getMyProfile, updateMyProfile, Profile } from "../lib/profile";
+import { supabase } from "../lib/supabase";
+import { pickAndUploadAvatar } from "../lib/avatar";
+import Avatar from "../components/Avatar";
 
 function normalizeUsername(value: string) {
   return value.trim().toLowerCase();

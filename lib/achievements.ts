@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import type { PRHit } from "./pr";
 
 type ExercisePRRow = {
   user_id: string;
@@ -25,26 +26,6 @@ type PRAchievementInput = {
   before: ExercisePRRow | null;
   after: ExercisePRRow | null;
 };
-
-type PRHit =
-  | {
-      mode: "track";
-      exercise_id: string;
-      exercise_name: string;
-      best_time_sec: number;
-      best_time_text: string;
-      entry_id: string;
-      set_number: number;
-    }
-  | {
-      mode: "lift";
-      exercise_id: string;
-      exercise_name: string;
-      best_weight: number;
-      best_reps: number | null;
-      entry_id: string;
-      set_number: number;
-    };
 
 function isBetterTime(before: ExercisePRRow | null, after: ExercisePRRow | null) {
   const prev = before?.best_time_sec;

@@ -8,6 +8,7 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        sceneStyle: { backgroundColor: c.bg },
         tabBarStyle: {
           backgroundColor: c.card,
           borderTopColor: c.border,
@@ -21,10 +22,6 @@ export default function TabLayout() {
       <Tabs.Screen name="log" options={{ title: "Workouts" }} />
       <Tabs.Screen name="friends" options={{ title: "Friends" }} />
       <Tabs.Screen name="profile" options={{ title: "Profile" }} />
-      <Tabs.Screen
-        name="profile-edit"
-        options={{ href: null }}
-      />
     </Tabs>
   );
 }

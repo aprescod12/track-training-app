@@ -27,6 +27,14 @@ type Workout = {
   workout_entries: Entry[];
 };
 
+type EventRow = {
+  id: string;
+  title: string;
+  notes: string | null;
+  starts_at: string;
+  ends_at: string | null;
+};
+
 function startOfWeekMonday(d: Date) {
   const date = new Date(d);
   const day = (date.getDay() + 6) % 7; // Mon=0 ... Sun=6
@@ -40,13 +48,21 @@ function addDays(d: Date, n: number) {
   return c;
 }
 
+function ymdLocal(ts: string) {
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export default function HomeScreen() {
   const c = useAppColors();
 
   const today = useMemo(() => new Date(), []);
   const todayKey = useMemo(() => formatYMD(today), [today]);
 
-  const [status, setStatus] = useState("Loading...");
+  const [error, setError] = useState<string | null>(null);
   const [userLabel, setUserLabel] = useState<string>("Welcome back");
 
   const [todaysWorkout, setTodaysWorkout] = useState<Workout | null>(null);
@@ -69,6 +85,8 @@ export default function HomeScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
 
+  const [weekEvents, setWeekEvents] = useState<EventRow[]>([]);
+
   const weekCounts = useMemo(() => {
     const map: Record<string, { track: number; lift: number; total: number }> = {};
     for (const w of weekWorkouts) {
@@ -79,6 +97,15 @@ export default function HomeScreen() {
     }
     return map;
   }, [weekWorkouts]);
+
+  const eventCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const e of weekEvents) {
+      const key = ymdLocal(e.starts_at);
+      map[key] = (map[key] ?? 0) + 1;
+    }
+    return map;
+  }, [weekEvents]);
 
   const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -157,7 +184,7 @@ export default function HomeScreen() {
   }, []);
 
   const load = useCallback(async () => {
-    setStatus("Loading...");
+    setError(null);
 
     // --- get user once ---
     const { data: userRes, error: userErr } = await supabase.auth.getUser();
@@ -170,10 +197,11 @@ export default function HomeScreen() {
       setUserLabel("Welcome back");
       setTodaysWorkout(null);
       setWeekWorkouts([]);
+      setWeekEvents([]);
       setWeeklyStats({ totalDistanceM: 0, trackWorkouts: 0, liftWorkouts: 0, liftSets: 0 });
       setFeaturedExercise(null);
       setFeaturedRows([]);
-      setStatus("Not logged in");
+      setError("Not logged in");
       return;
     }
 
@@ -206,7 +234,7 @@ export default function HomeScreen() {
       .maybeSingle();
 
     if (todayRes.error) {
-      setStatus("Error: " + todayRes.error.message);
+      setError("Error: " + todayRes.error.message);
       setTodaysWorkout(null);
       setWeekWorkouts([]);
       return;
@@ -217,6 +245,8 @@ export default function HomeScreen() {
     // 3) Week workouts (✅ my workouts only)
     const startKey = formatYMD(weekStart);
     const endKey = formatYMD(addDays(weekStart, 6));
+    const weekStartDate = new Date(`${startKey}T00:00:00`);
+    const weekEndExclusive = new Date(`${formatYMD(addDays(weekStart, 7))}T00:00:00`);
 
     const weekRes = await supabase
       .from("workouts")
@@ -228,13 +258,28 @@ export default function HomeScreen() {
       .order("created_at", { ascending: true });
 
     if (weekRes.error) {
-      setStatus("Error: " + weekRes.error.message);
+      setError("Error: " + weekRes.error.message);
       setWeekWorkouts([]);
       return;
     }
 
     const weekRows = (weekRes.data as any) ?? [];
     setWeekWorkouts(weekRows);
+
+    const { data: eData, error: eErr } = await supabase
+      .from("calendar_events")
+      .select("id, title, notes, starts_at, ends_at")
+      .eq("user_id", uid)
+      .gte("starts_at", weekStartDate.toISOString())
+      .lt("starts_at", weekEndExclusive.toISOString())
+      .order("starts_at", { ascending: true });
+
+    if (eErr) {
+      console.log("week events error:", eErr);
+      setWeekEvents([]);
+    } else {
+      setWeekEvents((eData as EventRow[]) ?? []);
+    }
 
     const trackWorkouts = weekRows.filter((w: any) => w.workout_type === "track").length;
     const liftWorkouts = weekRows.filter((w: any) => w.workout_type === "lift").length;
@@ -249,7 +294,7 @@ export default function HomeScreen() {
       .lte("workouts.workout_date", endKey);
 
     if (distErr) {
-      setStatus("Error: " + distErr.message);
+      setError("Error: " + distErr.message);
       return;
     }
 
@@ -276,7 +321,7 @@ export default function HomeScreen() {
 
     if (exErr) {
       setAllExercises([]);
-      setStatus("Error: " + exErr.message);
+      setError("Error: " + exErr.message);
       return;
     }
 
@@ -322,7 +367,6 @@ export default function HomeScreen() {
       setFeaturedRows([]);
     }
 
-    setStatus("Loaded ✅");
   }, [todayKey, weekStart, loadFeatured]);
 
   useFocusEffect(
@@ -347,8 +391,13 @@ export default function HomeScreen() {
       {/* Welcome */}
       <View style={{ gap: 4 }}>
         <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>{userLabel}</Text>
-        <Text style={{ color: c.subtext }}>{status}</Text>
       </View>
+
+      {error && (
+          <Text style={{ color: "#ef4444", fontWeight: "600" }}>
+            {error}
+          </Text>
+        )}
 
       {/* Today’s workout */}
       <View
@@ -628,6 +677,7 @@ export default function HomeScreen() {
             const trackCount = counts?.track ?? 0;
             const liftCount = counts?.lift ?? 0;
             const total = counts?.total ?? 0;
+            const hasEvent = (eventCounts[key] ?? 0) > 0;
 
             const selected = key === todayKey;
             const dayNum = d.getDate();
@@ -638,6 +688,20 @@ export default function HomeScreen() {
                 onPress={() => router.push(`/calendar/${key}`)}
                 style={{ width: `${100 / 7}%`, paddingVertical: 10, alignItems: "center" }}
               >
+                {hasEvent && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 2,
+                      alignSelf: "center",
+                      width: 6,
+                      height: 6,
+                      borderRadius: 999,
+                      backgroundColor: c.dark ? "#FFFFFF" : c.text,
+                      opacity: selected ? 1 : 0.9,
+                    }}
+                  />
+                )}
                 <View
                   style={{
                     minWidth: 32,
@@ -693,7 +757,7 @@ export default function HomeScreen() {
           })}
         </View>
 
-        <Text style={{ color: c.subtext }}>Tap a day to view workouts for that date.</Text>
+        <Text style={{ color: c.subtext }}>Tap a day to view workouts and events for that date.</Text>
       </View>
 
       {/* Picker overlay */}

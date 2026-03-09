@@ -6,19 +6,33 @@ export default function WorkoutLayout() {
 
   return (
     <Stack
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: c.bg,
-        },
-        headerTitleStyle: {
-          color: c.text,
-          fontWeight: "800",
-        },
-        headerTintColor: c.text,
-      }}
+    screenOptions={{
+      headerShown: false,
+      contentStyle: { backgroundColor: c.bg }, // ✅ important for dark mode behind screens
+    }}
     >
-      <Stack.Screen name="[id]" options={{ title: "Workout" }} />
-      <Stack.Screen name="[id]/edit" options={{ title: "Edit Workout" }} />
+      <Stack.Screen
+          name="[id]"
+          options={{
+            title: "Workout",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
+
+      <Stack.Screen
+          name="[id]/edit"
+          options={{
+            presentation: "modal",
+            title: "Edit Workout",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
     </Stack>
   );
 }

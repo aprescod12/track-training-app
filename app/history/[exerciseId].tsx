@@ -6,6 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
   useWindowDimensions,
+  DimensionValue
 } from "react-native";
 import type { ScrollView as RNScrollView } from "react-native";
 import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
@@ -127,7 +128,7 @@ function SkeletonLine({
   h = 12,
   radius = 8,
 }: {
-  w?: number | string;
+  w?: DimensionValue;
   h?: number;
   radius?: number;
 }) {
@@ -160,7 +161,7 @@ export default function ExerciseHistoryScreen() {
   const { exerciseId } = useLocalSearchParams<{ exerciseId: string }>();
 
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<string>("Loading...");
+  const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<HistoryRow[]>([]);
 
   const [exerciseName, setExerciseName] = useState<string>("Exercise History");
@@ -195,14 +196,14 @@ export default function ExerciseHistoryScreen() {
     if (!exerciseId) return;
   
     setLoading(true);
-    setStatus("Loading...");
+    setError(null);
   
     // ✅ get uid once
     const { data: u, error: uErr } = await supabase.auth.getUser();
     const uid = u.user?.id ?? null;
   
     if (uErr || !uid) {
-      setStatus("Not logged in");
+      setError("Not logged in");
       setRows([]);
       setExerciseName("Exercise History");
       setPrRow(null);
@@ -229,7 +230,7 @@ export default function ExerciseHistoryScreen() {
   
     if (error) {
       console.log("history load error:", error);
-      setStatus("Error: " + error.message);
+      setError("Error: " + error.message);
       setRows([]);
       setExerciseName("Exercise History");
       setPrRow(null);
@@ -290,7 +291,6 @@ export default function ExerciseHistoryScreen() {
       setPrRow(null);
     }
   
-    setStatus("Loaded ✅");
     setLoading(false);
   }, [exerciseId]);
 
@@ -722,7 +722,6 @@ export default function ExerciseHistoryScreen() {
 
   return (
     <FormScreen
-      scrollRef={scrollRef}
       refreshControlProps={{
         refreshing,
         onRefresh,
@@ -767,7 +766,11 @@ export default function ExerciseHistoryScreen() {
     </Pressable>
   </View>
 
-  <Text style={{ color: c.subtext }}>{status}</Text>
+  {error && (
+  <Text style={{ color: "#ef4444", fontWeight: "600" }}>
+    {error}
+  </Text>
+)}
 </View>
 
       {/* Progress Insights */}
