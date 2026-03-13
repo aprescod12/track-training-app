@@ -85,11 +85,14 @@ export default function FriendWorkoutDetail() {
 
   const [item, setItem] = useState<Workout | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!workoutId) return;
+  
+    setLoading(true);
     setError(null);
-
+  
     const { data, error } = await supabase
       .from("workouts")
       .select(
@@ -123,14 +126,16 @@ export default function FriendWorkoutDetail() {
       )
       .eq("id", workoutId)
       .single();
-
+  
     if (error) {
-      setError("Error: " + error.message);
+      setError(error.message);
       setItem(null);
+      setLoading(false);
       return;
     }
-
+  
     setItem(data as any);
+    setLoading(false);
   }, [workoutId]);
 
   useEffect(() => {
@@ -161,7 +166,7 @@ export default function FriendWorkoutDetail() {
         )}
       </View>
 
-      {!item && status.startsWith("Loading") && (
+      {loading && !item && (
         <View
           style={{
             borderWidth: 1,

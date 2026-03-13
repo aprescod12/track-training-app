@@ -32,7 +32,7 @@ type WorkoutRow = {
     full_name: string | null;
     school: string | null;
     team: string | null;
-  }[] | null;
+  } | null;
 
   workout_entries?: { id: string }[];
 };
@@ -178,7 +178,7 @@ export default function FriendsWorkoutsScreen() {
       return;
     }
 
-    const out = (data ?? []) as WorkoutRow[];
+    const out = (data ?? []) as unknown as WorkoutRow[];
     setRows(out);
     setLoading(false);
   }, [days]);
@@ -200,7 +200,7 @@ export default function FriendsWorkoutsScreen() {
 
   const renderWorkout = useCallback(
     (w: WorkoutRow) => {
-        const name = w.profiles?.[0]?.full_name ?? "Unknown";
+        const name = w.profiles?.full_name ?? "Unknown";
         const subtitle = formatWorkoutType(w.workout_type);
         const entryCount = w.workout_entries?.length ?? 0;
 

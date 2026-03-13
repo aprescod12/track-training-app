@@ -1,0 +1,17 @@
+{
+    "cli": {
+      "appVersionSource": "remote"
+    },
+    "build": {
+      "preview": {
+        "channel": "preview-clean",
+        "environment": "preview",
+        "autoIncrement": true
+      },
+      "production": {
+        "channel": "production",
+        "environment": "production",
+        "autoIncrement": true
+      }
+    }
+  }
