@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Text, TextInput, Pressable, ActivityIndicator, Alert, View } from "react-native";
+import { Text, TextInput, Pressable, ActivityIndicator, View } from "react-native";
 import { Stack, router } from "expo-router";
 import FormScreen from "../components/FormScreen";
+import AlertModal from "../components/AlertModal";
 import { useAppColors } from "../lib/theme";
 import { getMyProfile, updateMyProfile, Profile } from "../lib/profile";
 import { supabase } from "../lib/supabase";
@@ -31,6 +32,16 @@ export default function EditProfileScreen() {
   const [gradYear, setGradYear] = useState("");
   const [bio, setBio] = useState("");
 
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
+
+  function showAlert(title: string, message: string) {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertOpen(true);
+  }
+
   useEffect(() => {
     let mounted = true;
 
@@ -48,7 +59,7 @@ export default function EditProfileScreen() {
         setGradYear(p.grad_year ? String(p.grad_year) : "");
         setBio((((p as any).bio ?? "") as string) || "");
       } catch (e: any) {
-        Alert.alert("Load error", e?.message ?? "Failed to load profile");
+        showAlert("Load error", e?.message ?? "Failed to load profile");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -65,7 +76,7 @@ export default function EditProfileScreen() {
       const uid = userRes.user?.id ?? null;
 
       if (userErr || !uid) {
-        Alert.alert("Upload failed", "You must be logged in to upload an avatar.");
+        showAlert("Upload failed", "You must be logged in to upload an avatar.");
         return;
       }
 
@@ -74,7 +85,7 @@ export default function EditProfileScreen() {
 
       setAvatarUrl(publicUrl);
     } catch (e: any) {
-      Alert.alert("Upload failed", e?.message ?? "Could not upload avatar.");
+      showAlert("Upload failed", e?.message ?? "Could not upload avatar.");
     }
   }
 
@@ -86,17 +97,17 @@ export default function EditProfileScreen() {
       const normalizedUsername = normalizeUsername(username);
 
       if (gy !== null && (!Number.isFinite(gy) || gy < 1900 || gy > 2100)) {
-        Alert.alert("Invalid grad year", "Enter a year between 1900 and 2100.");
+        showAlert("Invalid grad year", "Enter a year between 1900 and 2100.");
         return;
       }
 
       if (!normalizedUsername) {
-        Alert.alert("Missing username", "Please enter a username.");
+        showAlert("Missing username", "Please enter a username.");
         return;
       }
 
       if (!isValidUsername(normalizedUsername)) {
-        Alert.alert(
+        showAlert(
           "Invalid username",
           "Username must be 3–20 characters and use only lowercase letters, numbers, and underscores."
         );
@@ -114,7 +125,7 @@ export default function EditProfileScreen() {
       if (usernameErr) throw usernameErr;
 
       if (existing && existing.id !== myId) {
-        Alert.alert("Username taken", "That username is already in use. Try another one.");
+        showAlert("Username taken", "That username is already in use. Try another one.");
         return;
       }
 
@@ -130,7 +141,7 @@ export default function EditProfileScreen() {
 
       router.back();
     } catch (e: any) {
-      Alert.alert("Save error", e?.message ?? "Failed to save profile");
+      showAlert("Save error", e?.message ?? "Failed to save profile");
     } finally {
       setSaving(false);
     }
@@ -147,120 +158,131 @@ export default function EditProfileScreen() {
   } as const;
 
   return (
-    <FormScreen>
-      <Stack.Screen options={{ title: "Edit Profile" }} />
+    <>
+      <FormScreen>
+        <Stack.Screen options={{ title: "Edit Profile" }} />
 
-      {loading ? (
-        <ActivityIndicator />
-      ) : !profile ? (
-        <Text style={{ color: c.subtext }}>No profile found.</Text>
-      ) : (
-        <View style={{ gap: 12 }}>
-          <View
-            style={{
-              borderWidth: 1,
-              borderColor: c.border,
-              borderRadius: 14,
-              padding: 12,
-              backgroundColor: c.card,
-              gap: 12,
-            }}
-          >
-            <View style={{ alignItems: "center" }}>
-              <Avatar uri={avatarUrl || null} name={fullName || username || "User"} size={84} />
-            </View>
+        {loading ? (
+          <ActivityIndicator />
+        ) : !profile ? (
+          <Text style={{ color: c.subtext }}>No profile found.</Text>
+        ) : (
+          <View style={{ gap: 12 }}>
+            <View
+              style={{
+                borderWidth: 1,
+                borderColor: c.border,
+                borderRadius: 14,
+                padding: 12,
+                backgroundColor: c.card,
+                gap: 12,
+              }}
+            >
+              <View style={{ alignItems: "center" }}>
+                <Avatar uri={avatarUrl || null} name={fullName || username || "User"} size={84} />
+              </View>
 
-            <View>
-              <Text style={{ color: c.subtext, fontWeight: "700" }}>Full name</Text>
-              <TextInput
-                value={fullName}
-                onChangeText={setFullName}
-                autoCapitalize="words"
-                style={inputStyle}
-              />
-            </View>
+              <View>
+                <Text style={{ color: c.subtext, fontWeight: "700" }}>Full name</Text>
+                <TextInput
+                  value={fullName}
+                  onChangeText={setFullName}
+                  autoCapitalize="words"
+                  style={inputStyle}
+                />
+              </View>
 
-            <View>
-              <Text style={{ color: c.subtext, fontWeight: "700" }}>Username</Text>
-              <TextInput
-                value={username}
-                onChangeText={(v) => setUsername(normalizeUsername(v))}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={inputStyle}
-              />
-              <Text style={{ color: c.subtext, marginTop: 4, fontSize: 12 }}>
-                3–20 chars • lowercase letters, numbers, underscores
-              </Text>
-            </View>
+              <View>
+                <Text style={{ color: c.subtext, fontWeight: "700" }}>Username</Text>
+                <TextInput
+                  value={username}
+                  onChangeText={(v) => setUsername(normalizeUsername(v))}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={inputStyle}
+                />
+                <Text style={{ color: c.subtext, marginTop: 4, fontSize: 12 }}>
+                  3–20 chars • lowercase letters, numbers, underscores
+                </Text>
+              </View>
 
-            <View style={{ gap: 8 }}>
-              <Text style={{ color: c.subtext, fontWeight: "700" }}>Avatar</Text>
+              <View style={{ gap: 8 }}>
+                <Text style={{ color: c.subtext, fontWeight: "700" }}>Avatar</Text>
+
+                <Pressable
+                  onPress={onUploadAvatar}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: c.border,
+                    borderRadius: 12,
+                    paddingVertical: 12,
+                    alignItems: "center",
+                    backgroundColor: c.bg,
+                  }}
+                >
+                  <Text style={{ color: c.text, fontWeight: "800" }}>
+                    {avatarUrl ? "Change Avatar" : "Upload Avatar"}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View>
+                <Text style={{ color: c.subtext, fontWeight: "700" }}>School</Text>
+                <TextInput value={school} onChangeText={setSchool} style={inputStyle} />
+              </View>
+
+              <View>
+                <Text style={{ color: c.subtext, fontWeight: "700" }}>Team</Text>
+                <TextInput value={team} onChangeText={setTeam} style={inputStyle} />
+              </View>
+
+              <View>
+                <Text style={{ color: c.subtext, fontWeight: "700" }}>Grad year</Text>
+                <TextInput
+                  value={gradYear}
+                  onChangeText={setGradYear}
+                  keyboardType="number-pad"
+                  style={inputStyle}
+                />
+              </View>
+
+              <View>
+                <Text style={{ color: c.subtext, fontWeight: "700" }}>Bio</Text>
+                <TextInput
+                  value={bio}
+                  onChangeText={setBio}
+                  multiline
+                  style={[inputStyle, { minHeight: 96, textAlignVertical: "top" }]}
+                />
+              </View>
 
               <Pressable
-                onPress={onUploadAvatar}
+                disabled={saving}
+                onPress={onSave}
                 style={{
-                  borderWidth: 1,
-                  borderColor: c.border,
-                  borderRadius: 12,
+                  marginTop: 8,
                   paddingVertical: 12,
-                  alignItems: "center",
-                  backgroundColor: c.bg,
+                  borderRadius: 12,
+                  backgroundColor: saving ? c.border : c.primary,
                 }}
               >
-                <Text style={{ color: c.text, fontWeight: "800" }}>
-                  {avatarUrl ? "Change Avatar" : "Upload Avatar"}
+                <Text style={{ textAlign: "center", color: c.primaryText, fontWeight: "800" }}>
+                  {saving ? "Saving..." : "Save"}
                 </Text>
               </Pressable>
             </View>
-
-            <View>
-              <Text style={{ color: c.subtext, fontWeight: "700" }}>School</Text>
-              <TextInput value={school} onChangeText={setSchool} style={inputStyle} />
-            </View>
-
-            <View>
-              <Text style={{ color: c.subtext, fontWeight: "700" }}>Team</Text>
-              <TextInput value={team} onChangeText={setTeam} style={inputStyle} />
-            </View>
-
-            <View>
-              <Text style={{ color: c.subtext, fontWeight: "700" }}>Grad year</Text>
-              <TextInput
-                value={gradYear}
-                onChangeText={setGradYear}
-                keyboardType="number-pad"
-                style={inputStyle}
-              />
-            </View>
-
-            <View>
-              <Text style={{ color: c.subtext, fontWeight: "700" }}>Bio</Text>
-              <TextInput
-                value={bio}
-                onChangeText={setBio}
-                multiline
-                style={[inputStyle, { minHeight: 96, textAlignVertical: "top" }]}
-              />
-            </View>
-
-            <Pressable
-              disabled={saving}
-              onPress={onSave}
-              style={{
-                marginTop: 8,
-                paddingVertical: 12,
-                borderRadius: 12,
-                backgroundColor: saving ? c.border : c.primary,
-              }}
-            >
-              <Text style={{ textAlign: "center", color: c.primaryText, fontWeight: "800" }}>
-                {saving ? "Saving..." : "Save"}
-              </Text>
-            </Pressable>
           </View>
-        </View>
-      )}
-    </FormScreen>
+        )}
+      </FormScreen>
+
+      <AlertModal
+        visible={alertOpen}
+        title={alertTitle}
+        message={alertMessage}
+        confirmText="OK"
+        onConfirm={() => setAlertOpen(false)}
+        onCancel={() => setAlertOpen(false)}
+      />
+    </>
   );
 }
