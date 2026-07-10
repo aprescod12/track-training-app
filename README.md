@@ -1,50 +1,132 @@
-# Welcome to your Expo app 👋
+# Track & Field Training App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A cross-platform training application built for track and field athletes to organize track sessions, strength workouts, calendar events, performance history, and athlete-specific training data in one place.
 
-## Get started
+The app is built with React Native, Expo, TypeScript, Expo Router, and Supabase. Its workflows are designed around the different data athletes need to record for track training and weight-room sessions rather than treating every workout as the same generic activity.
 
-1. Install dependencies
+## Current Features
 
-   ```bash
-   npm install
-   ```
+- Supabase authentication with persistent user sessions
+- Separate track and lift workout logging flows
+- Set, repetition, time, weight, and workout-note tracking
+- Exercise search and support for custom exercises
+- User-specific workout history stored in Supabase
+- Recent-workout filtering across all, seven-day, and thirty-day views
+- Monthly calendar combining workouts and manually added events
+- Swipe and button navigation between calendar months
+- Workout detail and exercise-history routes
+- Personal-record evaluation and achievement-processing logic
+- Profile, track-statistics, lift-statistics, overview, and training-hub routes
+- Light and dark theme support
+- Native and web-compatible session storage
 
-2. Start the app
+## Application Structure
 
-   ```bash
-   npx expo start
-   ```
+The application uses Expo Router for file-based navigation.
 
-In the output, you'll find options to open the app in a
+### Primary tabs
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- **Home** — athlete dashboard and entry point
+- **Calendar** — month-based workout and event planning
+- **Workouts** — workout history, filtering, and logging
+- **Friends** — social section within the main tab structure
+- **Profile** — athlete information, statistics, and training tools
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### Supporting routes
 
-## Get a fresh project
+The stack also includes authentication, workout logging, workout details, exercise history, calendar-event creation, profile editing, lift statistics, track statistics, an athlete overview, and a training hub.
 
-When you're ready, run:
+## Workout Logging
+
+The logging workflow supports two distinct workout types:
+
+### Track workouts
+
+Track entries can record exercises, sets, repetitions, individual repetition times, optional resistance, and notes.
+
+### Lift workouts
+
+Lift entries can record exercises, set-by-set repetitions, weights, and notes.
+
+The form supports multiple exercises in one workout, exercise suggestions, custom exercise creation, save feedback, personal-record checks, and achievement-processing hooks.
+
+## Calendar and History
+
+The calendar queries the authenticated user's workouts and calendar events for the selected month. It distinguishes track and lift activity, supports individual-day views, and allows users to add events for selected dates.
+
+The workout-history screen identifies the current day's workout, displays recent sessions, and filters prior workouts by date range. All workout queries are scoped to the authenticated user.
+
+## Architecture
+
+- **Frontend:** React Native with Expo and TypeScript
+- **Navigation:** Expo Router with stack, tab, modal, and dynamic routes
+- **Backend:** Supabase authentication and database services
+- **Session persistence:** AsyncStorage on native platforms and localStorage on the web
+- **State and UI:** React hooks, reusable form components, and a shared theme system
+- **Domain utilities:** Separate modules for exercises, dates, personal records, achievements, and Supabase access
+
+## Technology Stack
+
+- React Native
+- Expo
+- TypeScript
+- Expo Router
+- React Navigation
+- Supabase
+- AsyncStorage
+- Expo Notifications
+- Expo Image Picker
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js and npm
+- Expo Go, an Android emulator, an iOS simulator, or a web browser
+- A Supabase project configured with the database schema expected by the application
+
+### Installation
 
 ```bash
-npm run reset-project
+git clone https://github.com/aprescod12/track-training-app.git
+cd track-training-app
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Create a `.env` file in the project root:
 
-## Learn more
+```env
+EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Start the development server:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+npm start
+```
 
-## Join the community
+The Expo development menu can then open the app in Expo Go, an Android emulator, an iOS simulator, or a browser.
 
-Join our community of developers creating universal apps.
+## Available Scripts
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npm start
+npm run android
+npm run ios
+npm run web
+npm run lint
+```
+
+## Repository Organization
+
+```text
+app/          Expo Router screens and route layouts
+components/   Reusable interface and form components
+lib/          Supabase, theme, date, exercise, PR, and achievement utilities
+assets/       Static application assets
+```
+
+## Project Purpose
+
+This project combines software development with firsthand experience in track and field. It explores how athlete-specific workflows, structured training data, and accessible mobile interfaces can make workout planning and performance review more useful than a generic fitness log.
