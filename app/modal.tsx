@@ -825,8 +825,10 @@ export default function ModalScreen() {
             }}
           >
             <Text style={{ color: c.primary, fontWeight: "700" }}>
-              Create "{entry.exercise.trim()}"
-            </Text>
+              Create {'"'}
+              {entry.exercise.trim()}
+              {'"'}
+          </Text>
           </Pressable>
         )}
       </View>
