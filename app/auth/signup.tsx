@@ -64,20 +64,19 @@ export default function SignupScreen() {
         return;
       }
 
-      const { data: existingUsername, error: usernameCheckErr } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("username", u)
-        .maybeSingle();
+      const { data: usernameAvailable, error: usernameCheckErr } = await supabase.rpc(
+        "is_username_available",
+        { candidate: u }
+      );
 
       if (usernameCheckErr) throw usernameCheckErr;
 
-      if (existingUsername) {
+      if (!usernameAvailable) {
         showAlert("Username taken", "That username is already in use. Try another one.");
         return;
       }
 
-      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+      const { error: signUpErr } = await supabase.auth.signUp({
         email: e,
         password,
         options: {
@@ -89,27 +88,6 @@ export default function SignupScreen() {
       });
 
       if (signUpErr) throw signUpErr;
-
-      const userId = signUpData.user?.id ?? signUpData.session?.user?.id ?? null;
-
-      if (userId) {
-        const { error: profileErr } = await supabase.from("profiles").upsert(
-          {
-            id: userId,
-            full_name: name || null,
-            username: u,
-          },
-          { onConflict: "id" }
-        );
-
-        if (profileErr) {
-          if ((profileErr as any).code === "23505") {
-            showAlert("Username taken", "That username is already in use. Try another one.");
-            return;
-          }
-          throw profileErr;
-        }
-      }
 
       showAlert(
         "Account created",
