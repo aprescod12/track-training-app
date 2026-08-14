@@ -44,6 +44,15 @@ The complete migration was executed against production inside a `BEGIN ... ROLLB
 
 `20260730050000_signup_username_compatibility.sql` adds the username-availability RPC used during signup and maintains automatic profile creation through the auth user trigger.
 
+## Friendship transition hardening
+
+`20260814213500_friendship_transition_hardening.sql` makes friendship state changes database-enforced rather than client-enforced. It:
+
+- requires new friendship rows to begin as `pending`;
+- allows only the non-requesting participant to change a pending request to `accepted`;
+- limits authenticated `UPDATE` privileges to the `status` column so friendship participants and requester identity cannot be rewritten;
+- preserves participant deletion for declining, cancelling, and unfriending.
+
 ## Local development
 
 Start the local Supabase stack:
@@ -80,7 +89,7 @@ Local Expo development should use `.env.local` with the local Supabase URL and p
 
 ## Validation completed
 
-The migration stack has been validated locally with:
+The migration stack through `20260730050000_signup_username_compatibility.sql` has been validated locally with:
 
 - a clean `supabase db reset`;
 - `supabase db lint` with no schema errors;
@@ -94,6 +103,8 @@ The migration stack has been validated locally with:
 - accepted-friend workout visibility;
 - prevention of friend edits/deletes to another user's workout;
 - removal of workout visibility immediately after unfriending.
+
+The friendship transition hardening migration still requires its focused local regression check before the PR is considered ready to merge.
 
 Production remains unchanged until the production migrations are deliberately deployed.
 
