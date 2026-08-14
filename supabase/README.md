@@ -1,6 +1,6 @@
 # Supabase development workflow
 
-This directory begins the repository-managed Supabase workflow for the Track Training app.
+This directory contains the repository-managed Supabase configuration and migrations for the Track Training app.
 
 ## Connected production project
 
@@ -10,51 +10,101 @@ This directory begins the repository-managed Supabase workflow for the Track Tra
 
 Do not commit project secrets, database passwords, service-role keys, or local environment files.
 
-## Current migration
+## Migration baseline
 
-`migrations/20260730043000_production_foundation_security.sql` is a production-hardening migration for the schema that already exists in the connected project. It:
+The production project was originally created through the Supabase dashboard and did not have repository-managed migration history.
 
-- replaces duplicated RLS policies with one explicit set;
-- removes Data API access for anonymous users;
-- grants authenticated users only the table privileges required by the current application;
-- preserves owner and accepted-friend workout visibility;
-- adds `WITH CHECK` protection to update policies;
-- keeps `workout_summary_v` as a security-invoker view;
-- fixes mutable function search paths;
-- removes unused duplicate PR trigger functions;
-- revokes direct RPC execution of internal and trigger functions;
-- restricts avatar listing and writes to each authenticated user's own folder.
+The existing production `public` schema has now been captured in:
 
-The migration was executed inside a `BEGIN ... ROLLBACK` transaction against the connected production schema on July 30, 2026. PostgreSQL accepted the complete migration and the transaction was rolled back, so production was not changed during validation.
+- `20260730040000_initial_schema_baseline.sql`
+- `20260730041000_auth_storage_baseline.sql`
 
-## Important baseline note
+These migrations document the schema, auth trigger, and avatar storage bucket that already exist remotely.
 
-The connected project was originally created through the Supabase dashboard and currently has no migration history. This first migration therefore assumes the existing tables, views, triggers, and functions are present.
+The baseline must not be applied back to the existing production project as though these objects were new.
 
-Before using `supabase db reset` as a complete local bootstrap, pull the current production schema into a separate baseline migration using the Supabase CLI and review the generated SQL:
+## Production security migration
 
-```bash
-npx supabase login
-npx supabase link --project-ref pxkpfgultgopernrmqzv
-npx supabase db pull initial_schema_baseline
-npx supabase migration list
-```
+`20260730043000_production_foundation_security.sql` hardens the existing schema by:
 
-Place the generated baseline before the security migration. Do not apply the generated baseline back to production; it documents objects that already exist.
+- consolidating duplicated RLS policies;
+- removing anonymous Data API access;
+- limiting authenticated table privileges;
+- preserving owner and accepted-friend workout visibility;
+- adding `WITH CHECK` protection to update policies;
+- keeping `workout_summary_v` as a security-invoker view;
+- fixing mutable function search paths;
+- removing unused duplicate PR trigger functions;
+- revoking direct RPC execution of internal and trigger functions;
+- restricting avatar listing and writes to each authenticated user's own folder.
 
-## Local workflow
+The complete migration was executed against production inside a `BEGIN ... ROLLBACK` transaction. PostgreSQL accepted it and the rollback left production unchanged.
+
+## Signup compatibility
+
+`20260730050000_signup_username_compatibility.sql` adds the username-availability RPC used during signup and maintains automatic profile creation through the auth user trigger.
+
+## Local development
+
+Start the local Supabase stack:
 
 ```bash
 npx supabase start
-npx supabase db reset
-npx supabase gen types typescript --local > lib/database.types.ts
 ```
 
-After every schema change:
+Rebuild the local database entirely from migrations:
+
+```bash
+npx supabase db reset
+```
+
+Lint the database schema:
 
 ```bash
 npx supabase db lint
-npx supabase migration list
 ```
 
-Test authentication, workout creation/editing/deletion, calendar events, friend requests, friend workout visibility, personal records, achievements, and avatar uploads before promoting a migration to production.
+Inspect local service URLs and keys:
+
+```bash
+npx supabase status
+```
+
+Stop the local stack:
+
+```bash
+npx supabase stop
+```
+
+Local Expo development should use `.env.local` with the local Supabase URL and publishable key. `.env.local` must never be committed.
+
+## Validation completed
+
+The migration stack has been validated locally with:
+
+- a clean `supabase db reset`;
+- `supabase db lint` with no schema errors;
+- signup and duplicate-username checks;
+- automatic profile creation;
+- authentication and sign-in;
+- avatar upload;
+- workout creation, editing, and deletion;
+- non-friend workout privacy;
+- pending friendship privacy;
+- accepted-friend workout visibility;
+- prevention of friend edits/deletes to another user's workout;
+- removal of workout visibility immediately after unfriending.
+
+Production remains unchanged until the production migrations are deliberately deployed.
+
+## Future schema changes
+
+For every schema change:
+
+1. Create a new timestamped migration.
+2. Run `npx supabase db reset`.
+3. Run `npx supabase db lint`.
+4. Run the relevant application regression tests.
+5. Review the migration before deploying it remotely.
+
+Never use dashboard-only schema changes as the long-term source of truth.
