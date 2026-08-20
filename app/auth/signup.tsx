@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Text, TextInput, Pressable } from "react-native";
 import { Stack, router } from "expo-router";
 import { supabase } from "../../lib/supabase";
+import { toAppError } from "../../lib/errors";
 import FormScreen from "../../components/FormScreen";
 import AlertModal from "../../components/AlertModal";
 import { useAppColors } from "../../lib/theme";
@@ -95,8 +96,11 @@ export default function SignupScreen() {
       );
 
       router.replace("/auth/login");
-    } catch (err: any) {
-      showAlert("Signup failed", err?.message ?? "Unknown error");
+    } catch (err: unknown) {
+      const appError = toAppError(err, {
+        fallbackMessage: "Unable to create your account. Please try again.",
+      });
+      showAlert("Signup failed", appError.message);
     } finally {
       setLoading(false);
     }

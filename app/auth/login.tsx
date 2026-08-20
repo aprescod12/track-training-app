@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Text, TextInput, Pressable } from "react-native";
 import { Stack, router } from "expo-router";
 import { supabase } from "../../lib/supabase";
+import { toAppError } from "../../lib/errors";
 import FormScreen from "../../components/FormScreen";
 import AlertModal from "../../components/AlertModal";
 import { useAppColors } from "../../lib/theme";
@@ -52,8 +53,11 @@ export default function LoginScreen() {
       if (error) throw error;
 
       router.replace("/(tabs)");
-    } catch (err: any) {
-      showAlert("Login failed", err?.message ?? "Unknown error");
+    } catch (err: unknown) {
+      const appError = toAppError(err, {
+        fallbackMessage: "Unable to log in. Please try again.",
+      });
+      showAlert("Login failed", appError.message);
     } finally {
       setLoading(false);
     }
