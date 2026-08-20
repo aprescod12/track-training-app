@@ -12,6 +12,28 @@ type StorageLike = {
   removeItem: (key: string) => Promise<void>;
 };
 
+type WorkoutEntryTable = Database["public"]["Tables"]["workout_entries"];
+
+// PostgreSQL exposes text[] without preserving array dimensions in generated types.
+// Track workouts intentionally store set_times as a two-dimensional text array.
+type AppDatabase = Omit<Database, "public"> & {
+  public: Omit<Database["public"], "Tables"> & {
+    Tables: Omit<Database["public"]["Tables"], "workout_entries"> & {
+      workout_entries: Omit<WorkoutEntryTable, "Row" | "Insert" | "Update"> & {
+        Row: Omit<WorkoutEntryTable["Row"], "set_times"> & {
+          set_times: string[][] | null;
+        };
+        Insert: Omit<WorkoutEntryTable["Insert"], "set_times"> & {
+          set_times?: string[][] | null;
+        };
+        Update: Omit<WorkoutEntryTable["Update"], "set_times"> & {
+          set_times?: string[][] | null;
+        };
+      };
+    };
+  };
+};
+
 const noopStorage: StorageLike = {
   getItem: async () => null,
   setItem: async () => {},
@@ -37,7 +59,7 @@ function getStorage(): StorageLike {
   };
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient<AppDatabase>(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: getStorage(),
     persistSession: true,
