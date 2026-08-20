@@ -3,8 +3,25 @@ import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 import { View } from "react-native";
 import { useAppColors } from "../lib/theme";
+import * as Sentry from '@sentry/react-native';
 
-export default function RootLayout() {
+Sentry.init({
+  dsn: 'https://5ec0d339a9abe5154477af55b2e502b5@o4511943336329216.ingest.us.sentry.io/4511943336591360',
+
+  // Adds more context data to events (IP address, cookies, user, etc.)
+  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  sendDefaultPii: false,
+
+  environment: process.env.EXPO_PUBLIC_APP_ENV ?? "local",
+
+  // Enable Logs
+  enableLogs: false,
+
+  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+  // spotlight: __DEV__,
+});
+
+export default Sentry.wrap(function RootLayout() {
   const c = useAppColors();
 
   return (
@@ -142,4 +159,4 @@ export default function RootLayout() {
       <StatusBar style={c.dark ? "light" : "dark"} />
     </View>
   );
-}
+});
