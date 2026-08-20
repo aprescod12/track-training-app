@@ -1,5 +1,8 @@
 import { supabase } from "./supabase";
+import type { TablesInsert } from "./database.types";
 import type { PRHit } from "./pr";
+
+type AchievementInsert = TablesInsert<"achievements">;
 
 type ExercisePRRow = {
   user_id: string;
@@ -89,7 +92,7 @@ export async function createPRAchievementsFromDiff(input: PRAchievementInput) {
 
   if (!userId || !workoutId || !exerciseId || !after) return;
 
-  const inserts: Array<Record<string, any>> = [];
+  const inserts: AchievementInsert[] = [];
 
   if (isBetterTime(before, after) && after.best_time_sec != null) {
     inserts.push({
@@ -149,7 +152,7 @@ export async function createPRAchievementsFromHits(args: {
 
   if (!userId || !workoutId || !hits.length) return;
 
-  const inserts: Array<Record<string, any>> = [];
+  const inserts: AchievementInsert[] = [];
 
   for (const hit of hits) {
     if (hit.mode === "track") {
