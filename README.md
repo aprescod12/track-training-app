@@ -77,6 +77,18 @@ The workout-history screen identifies the current day's workout, displays recent
 - Expo Notifications
 - Expo Image Picker
 
+## Environments
+
+The app uses three environment levels:
+
+- **Local** — developer work, Supabase CLI/Docker, migrations, destructive tests, and CI
+- **Staging / pilot** — the existing hosted Supabase project used by preview/TestFlight builds and invited teammate testing
+- **Production** — a future clean Supabase project created from the repository migration stack when the app is ready for production users
+
+EAS `preview` builds identify themselves as staging and EAS `production` builds identify themselves as production. Runtime configuration prevents a production build from connecting to the current staging/pilot Supabase project.
+
+See [`docs/environments.md`](docs/environments.md) for the environment model, promotion path, and configuration rules.
+
 ## Getting Started
 
 ### Prerequisites
@@ -93,12 +105,15 @@ cd track-training-app
 npm install
 ```
 
-Create a `.env` file in the project root:
+Create a local ignored environment file in the project root, such as `.env.local`:
 
 ```env
+EXPO_PUBLIC_APP_ENV=local
 EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
+
+`EXPO_PUBLIC_APP_ENV` may be `local`, `staging`, or `production`. Local development currently defaults to `local` if the variable is omitted, while EAS preview and production builds set the value explicitly.
 
 Start the development server:
 
@@ -116,6 +131,7 @@ npm run android
 npm run ios
 npm run web
 npm run lint
+npm test
 ```
 
 ## Repository Organization
@@ -123,8 +139,10 @@ npm run lint
 ```text
 app/          Expo Router screens and route layouts
 components/   Reusable interface and form components
-lib/          Supabase, theme, date, exercise, PR, and achievement utilities
+lib/          Supabase, environment, theme, date, exercise, PR, and achievement utilities
 assets/       Static application assets
+docs/         Project documentation, including environment rules
+supabase/     Local Supabase configuration and repository-managed migrations
 ```
 
 ## Project Purpose
