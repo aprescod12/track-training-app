@@ -1,17 +1,23 @@
 {
-    "cli": {
-      "appVersionSource": "remote"
+  "cli": {
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "preview": {
+      "channel": "preview-clean",
+      "environment": "preview",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "staging"
+      }
     },
-    "build": {
-      "preview": {
-        "channel": "preview-clean",
-        "environment": "preview",
-        "autoIncrement": true
-      },
-      "production": {
-        "channel": "production",
-        "environment": "production",
-        "autoIncrement": true
+    "production": {
+      "channel": "production",
+      "environment": "production",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "production"
       }
     }
   }
+}

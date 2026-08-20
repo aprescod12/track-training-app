@@ -2,9 +2,9 @@
 import { Platform } from "react-native";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
+import { getEnvironmentConfig } from "./environment";
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+const { supabaseUrl, supabaseAnonKey } = getEnvironmentConfig();
 
 type StorageLike = {
   getItem: (key: string) => Promise<string | null>;
