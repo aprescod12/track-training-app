@@ -1,3 +1,4 @@
+import { AppError, toAppError } from "./errors";
 import { supabase } from "./supabase";
 
 export type Profile = {
@@ -16,10 +17,20 @@ export type Profile = {
 
 export async function getMyProfile() {
   const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) throw authErr;
+  if (authErr) {
+    throw toAppError(authErr, {
+      fallbackMessage: "Could not verify your session. Please sign in again.",
+    });
+  }
 
   const user = authData.user;
-  if (!user) throw new Error("Not authenticated");
+  if (!user) {
+    throw new AppError({
+      kind: "auth",
+      code: "not_authenticated",
+      message: "Please sign in to continue.",
+    });
+  }
 
   const { data, error } = await supabase
     .from("profiles")
@@ -27,16 +38,31 @@ export async function getMyProfile() {
     .eq("id", user.id)
     .single();
 
-  if (error) throw error;
+  if (error) {
+    throw toAppError(error, {
+      fallbackMessage: "Could not load your profile. Please try again.",
+    });
+  }
+
   return data as Profile;
 }
 
 export async function updateMyProfile(patch: Partial<Profile>) {
   const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr) throw authErr;
+  if (authErr) {
+    throw toAppError(authErr, {
+      fallbackMessage: "Could not verify your session. Please sign in again.",
+    });
+  }
 
   const user = authData.user;
-  if (!user) throw new Error("Not authenticated");
+  if (!user) {
+    throw new AppError({
+      kind: "auth",
+      code: "not_authenticated",
+      message: "Please sign in to continue.",
+    });
+  }
 
   const { data, error } = await supabase
     .from("profiles")
@@ -45,6 +71,11 @@ export async function updateMyProfile(patch: Partial<Profile>) {
     .select("*")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    throw toAppError(error, {
+      fallbackMessage: "Could not update your profile. Please try again.",
+    });
+  }
+
   return data as Profile;
 }
