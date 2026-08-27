@@ -67,7 +67,7 @@ export default function TrainingHubScreen() {
   }
 
   return (
-    <FormScreen>
+    <FormScreen contentContainerStyle={{ width: "100%", maxWidth: 1100, alignSelf: "center" }}>
       <View style={{ gap: 14 }}>
         <View
           style={{
@@ -81,7 +81,7 @@ export default function TrainingHubScreen() {
         >
           <Text style={{ fontSize: 24, fontWeight: "900", color: c.text }}>Training Hub</Text>
           <Text style={{ color: c.subtext, lineHeight: 20 }}>
-            Your central space for personal workouts, team assignments, stats, and your training schedule.
+            Your central space for personal workouts, teams, assignments, stats, and your training schedule.
           </Text>
         </View>
 
@@ -102,13 +102,21 @@ export default function TrainingHubScreen() {
           </View>
         </Section>
 
-        <Section title="Team Training">
-          <HubTile
-            title="Assignments & Coach Tools"
-            subtitle="Open assigned workouts, submit training outcomes, or manage coach assignments and reviews."
-            onPress={() => router.push("/team-training")}
-            large
-          />
+        <Section title="Team & Coach Tools">
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <HubTile
+              title="Teams & Roster"
+              subtitle="Create teams, invite members, view the roster, and configure explicit coaching access."
+              onPress={() => router.push("/teams")}
+              large
+            />
+            <HubTile
+              title="Assignments & Coach Tools"
+              subtitle="Open assigned workouts, create prescriptions, assign training, and review athlete submissions."
+              onPress={() => router.push("/team-training")}
+              large
+            />
+          </View>
         </Section>
 
         <Section title="Performance">
