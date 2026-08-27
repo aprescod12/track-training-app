@@ -11,6 +11,12 @@ import {
   type CoachTeam,
   type WorkoutTemplateEntryDraft,
 } from "../../lib/training";
+import {
+  coachHasTrainingPermission,
+  getMyCoachTrainingPermissions,
+  type CoachTrainingPermission,
+  type TrainingWorkoutType,
+} from "../../lib/teams";
 
 type EntryForm = {
   exercise: string;
@@ -63,10 +69,13 @@ function optionalNonNegative(value: string, label: string) {
 export default function NewWorkoutTemplateScreen() {
   const c = useAppColors();
   const [teams, setTeams] = useState<CoachTeam[]>([]);
+  const [permissionsByTeam, setPermissionsByTeam] = useState<
+    Record<string, CoachTrainingPermission[]>
+  >({});
   const [teamId, setTeamId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [workoutType, setWorkoutType] = useState<"track" | "lift">("track");
+  const [workoutType, setWorkoutType] = useState<TrainingWorkoutType>("track");
   const [entries, setEntries] = useState<EntryForm[]>([blankEntry()]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +83,12 @@ export default function NewWorkoutTemplateScreen() {
   const loadTeams = useCallback(async () => {
     try {
       const rows = await getActiveCoachTeams();
+      const permissionPairs = await Promise.all(
+        rows.map(async (team) => [team.team_id, await getMyCoachTrainingPermissions(team.team_id)] as const)
+      );
+      const permissionMap = Object.fromEntries(permissionPairs);
       setTeams(rows);
+      setPermissionsByTeam(permissionMap);
       setTeamId((current) => current || rows[0]?.team_id || "");
     } catch (error: unknown) {
       setError(
@@ -89,6 +103,23 @@ export default function NewWorkoutTemplateScreen() {
     loadTeams();
   }, [loadTeams]);
 
+  const teamPermissions = permissionsByTeam[teamId] ?? [];
+  const canPrescribe = coachHasTrainingPermission(
+    teamPermissions,
+    workoutType,
+    "prescribe"
+  );
+  const canPrescribeTrack = coachHasTrainingPermission(teamPermissions, "track", "prescribe");
+  const canPrescribeLift = coachHasTrainingPermission(teamPermissions, "lift", "prescribe");
+
+  useEffect(() => {
+    if (!teamId) return;
+    if (workoutType === "track" && canPrescribeTrack) return;
+    if (workoutType === "lift" && canPrescribeLift) return;
+    if (canPrescribeTrack) setWorkoutType("track");
+    else if (canPrescribeLift) setWorkoutType("lift");
+  }, [teamId, workoutType, canPrescribeTrack, canPrescribeLift]);
+
   function patchEntry(index: number, patch: Partial<EntryForm>) {
     setEntries((current) => current.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
   }
@@ -97,6 +128,10 @@ export default function NewWorkoutTemplateScreen() {
     const team = teams.find((item) => item.team_id === teamId);
     if (!team) {
       setError("Select an active team where you are a coach.");
+      return;
+    }
+    if (!canPrescribe) {
+      setError(`Your team role does not include ${workoutType === "lift" ? "Lift" : "Track"} prescription authority.`);
       return;
     }
     if (!title.trim()) {
@@ -152,7 +187,7 @@ export default function NewWorkoutTemplateScreen() {
     <FormScreen>
       <View style={{ gap: 4 }}>
         <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>New workout template</Text>
-        <Text style={{ color: c.subtext }}>Create a reusable prescription for one of your teams.</Text>
+        <Text style={{ color: c.subtext }}>Create a reusable prescription within your coaching authority.</Text>
       </View>
 
       {error && <Text style={{ color: "#ef4444", fontWeight: "600" }}>{error}</Text>}
@@ -177,16 +212,36 @@ export default function NewWorkoutTemplateScreen() {
 
             <Text style={{ fontWeight: "800", color: c.text }}>Workout type</Text>
             <View style={{ flexDirection: "row", gap: 8 }}>
-              {(["track", "lift"] as const).map((type) => (
-                <Pressable
-                  key={type}
-                  onPress={() => setWorkoutType(type)}
-                  style={{ flex: 1, borderWidth: 1, borderColor: c.border, borderRadius: 999, padding: 10, alignItems: "center", backgroundColor: workoutType === type ? c.primary : c.bg }}
-                >
-                  <Text style={{ color: workoutType === type ? c.primaryText : c.text, fontWeight: "700" }}>{type === "track" ? "Track" : "Lift"}</Text>
-                </Pressable>
-              ))}
+              {(["track", "lift"] as TrainingWorkoutType[]).map((type) => {
+                const allowed = coachHasTrainingPermission(teamPermissions, type, "prescribe");
+                return (
+                  <Pressable
+                    key={type}
+                    disabled={!allowed}
+                    onPress={() => allowed && setWorkoutType(type)}
+                    style={{
+                      flex: 1,
+                      borderWidth: 1,
+                      borderColor: workoutType === type && allowed ? c.primary : c.border,
+                      borderRadius: 999,
+                      padding: 10,
+                      alignItems: "center",
+                      backgroundColor: workoutType === type && allowed ? c.primary : c.bg,
+                      opacity: allowed ? 1 : 0.45,
+                    }}
+                  >
+                    <Text style={{ color: workoutType === type && allowed ? c.primaryText : c.text, fontWeight: "700" }}>
+                      {type === "track" ? "Track" : "Lift"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
+            {!canPrescribeTrack && !canPrescribeLift && (
+              <Text style={{ color: c.subtext }}>
+                You can view training for assigned athletes, but a team manager has not granted you Track or Lift prescription authority.
+              </Text>
+            )}
 
             <TextInput value={title} onChangeText={setTitle} placeholder="Template title" placeholderTextColor="#8A8A8A" style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, color: c.text, borderRadius: 12, padding: 12 }} />
             <TextInput value={description} onChangeText={setDescription} placeholder="Description (optional)" placeholderTextColor="#8A8A8A" multiline style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, color: c.text, borderRadius: 12, padding: 12, minHeight: 70, textAlignVertical: "top" }} />
@@ -221,7 +276,7 @@ export default function NewWorkoutTemplateScreen() {
             <PrimaryButton title="Add prescription entry" onPress={() => setEntries((current) => [...current, blankEntry()])} />
           </View>
 
-          <PrimaryButton title={saving ? "Saving…" : "Save template"} onPress={save} disabled={saving} />
+          <PrimaryButton title={saving ? "Saving…" : "Save template"} onPress={save} disabled={saving || !canPrescribe} />
         </>
       )}
     </FormScreen>
