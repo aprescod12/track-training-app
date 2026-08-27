@@ -18,5 +18,8 @@ export function useAppColors() {
     border: dark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.16)",
     primary: dark ? "#fff" : "#000",
     primaryText: dark ? "#000" : "#fff",
+    track: dark ? "#34D399" : "#16A34A",
+    lift: dark ? "#60A5FA" : "#2563EB",
+    event: dark ? "#C084FC" : "#9333EA",
   };
 }
