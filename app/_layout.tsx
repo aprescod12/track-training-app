@@ -3,7 +3,7 @@ import { Stack, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import "react-native-reanimated";
-import { Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { useAppColors } from "../lib/theme";
 import { initNotificationHandler } from "../lib/notifications";
 import * as Sentry from '@sentry/react-native';
@@ -28,6 +28,8 @@ Sentry.init({
 
 function useNotificationObserver() {
   useEffect(() => {
+    if (Platform.OS === "web") return;
+
     function redirect(notification: Notifications.Notification) {
       const url = notification.request.content.data?.url;
       if (typeof url === "string" && url.startsWith("/")) {
