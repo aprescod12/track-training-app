@@ -1,11 +1,12 @@
 import { Text, Pressable, ActivityIndicator, Alert, View } from "react-native";
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { supabase } from "../../lib/supabase";
 import FormScreen from "../../components/FormScreen";
 import { useAppColors } from "../../lib/theme";
 import { router, useFocusEffect } from "expo-router";
 import { getMyProfile, Profile } from "../../lib/profile";
 import Avatar from "../../components/Avatar";
+import { toAppError } from "../../lib/errors";
 
 export default function ProfileScreen() {
   const c = useAppColors();
@@ -28,8 +29,11 @@ export default function ProfileScreen() {
       setLoadingProfile(true);
       const p = await getMyProfile();
       setProfile(p);
-    } catch (e: any) {
-      Alert.alert("Profile error", e?.message ?? "Failed to load profile");
+    } catch (e: unknown) {
+      const appError = toAppError(e, {
+        fallbackMessage: "Could not load your profile. Please try again.",
+      });
+      Alert.alert("Profile error", appError.message);
       setProfile(null);
     } finally {
       setLoadingProfile(false);
@@ -51,7 +55,7 @@ export default function ProfileScreen() {
           totalDistanceM: 0,
           totalLiftSets: 0,
         });
-        setStatus("Not logged in");
+        setStatus("Please sign in again");
         return;
       }
 
@@ -101,8 +105,11 @@ export default function ProfileScreen() {
       });
 
       setStatus("Up to date");
-    } catch (e: any) {
-      Alert.alert("Stats error", e?.message ?? "Failed to load stats");
+    } catch (e: unknown) {
+      const appError = toAppError(e, {
+        fallbackMessage: "Could not load your training stats. Pull to refresh and try again.",
+      });
+      Alert.alert("Stats error", appError.message);
       setStats({
         totalWorkouts: 0,
         trackWorkouts: 0,
@@ -124,10 +131,6 @@ export default function ProfileScreen() {
     await supabase.auth.signOut();
     router.replace("/auth/login");
   }
-
-  useEffect(() => {
-    loadAll();
-  }, [loadAll]);
 
   useFocusEffect(
     useCallback(() => {
