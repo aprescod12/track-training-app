@@ -1,11 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
-import { View, Text, Pressable, PanResponder } from "react-native";
+import { PanResponder, Pressable, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
+import FormScreen from "../../components/FormScreen";
 import PrimaryButton from "../../components/PrimaryButton";
 import { supabase } from "../../lib/supabase";
 import { formatYMD } from "../../lib/date";
-import FormScreen from "../../components/FormScreen";
 import { useAppColors } from "../../lib/theme";
+import {
+  getAthleteAssignments,
+  type AthleteAssignment,
+} from "../../lib/training";
+import { syncAthleteTrainingNotifications } from "../../lib/trainingNotifications";
 
 type Workout = {
   id: string;
@@ -23,149 +28,169 @@ type EventRow = {
   ends_at: string | null;
 };
 
-function addDays(d: Date, n: number) {
-  const c = new Date(d);
-  c.setDate(c.getDate() + n);
-  return c;
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
 }
-function startOfMonth(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
 }
-function endOfMonth(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0);
+
+function endOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
 }
+
 function isSameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
 }
-function weekdayMonFirst(d: Date) {
-  return (d.getDay() + 6) % 7;
-}
+
 function buildMonthGrid(anchor: Date) {
   const first = startOfMonth(anchor);
-  const offset = weekdayMonFirst(first);
-  const gridStart = addDays(first, -offset);
-  return Array.from({ length: 42 }, (_, i) => {
-    const date = addDays(gridStart, i);
+  const mondayOffset = (first.getDay() + 6) % 7;
+  const gridStart = addDays(first, -mondayOffset);
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = addDays(gridStart, index);
     return { date, inMonth: date.getMonth() === anchor.getMonth() };
   });
 }
 
-function ymdLocal(ts: string) {
-  const d = new Date(ts);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function ymdLocal(timestamp: string) {
+  return formatYMD(new Date(timestamp));
 }
 
-function formatEventTime(ts: string) {
-  return new Date(ts).toLocaleTimeString([], {
+function formatEventTime(timestamp: string) {
+  return new Date(timestamp).toLocaleTimeString([], {
     hour: "numeric",
     minute: "2-digit",
   });
 }
 
+function assignmentStatus(row: AthleteAssignment) {
+  if (row.assignment_status === "cancelled") return "Cancelled";
+  if (row.completion_status === "completed") return "Completed";
+  if (row.completion_status === "partially_completed") return "Partially completed";
+  if (row.completion_status === "modified") return "Modified";
+  if (row.completion_status === "skipped") return "Skipped";
+  if (row.completion_status === "unavailable") return "Unavailable";
+  if (row.assignment_status === "closed") return "Closed";
+  return "Assigned";
+}
+
 export default function CalendarScreen() {
   const c = useAppColors();
-
   const today = useMemo(() => new Date(), []);
   const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(today));
-  const [selectedDate, setSelectedDate] = useState<Date>(today);
-
+  const [selectedDate, setSelectedDate] = useState(today);
   const [monthWorkouts, setMonthWorkouts] = useState<Workout[]>([]);
-  const [selectedDayWorkouts, setSelectedDayWorkouts] = useState<Workout[]>([]);
   const [monthEvents, setMonthEvents] = useState<EventRow[]>([]);
-  const [selectedDayEvents, setSelectedDayEvents] = useState<EventRow[]>([]);
-
+  const [monthAssignments, setMonthAssignments] = useState<AthleteAssignment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  const selectedKey = useMemo(() => formatYMD(selectedDate), [selectedDate]);
+  const grid = useMemo(() => buildMonthGrid(monthAnchor), [monthAnchor]);
   const monthLabel = useMemo(
     () => monthAnchor.toLocaleString(undefined, { month: "long", year: "numeric" }),
     [monthAnchor]
   );
 
-  const grid = useMemo(() => buildMonthGrid(monthAnchor), [monthAnchor]);
+  const selectedDayWorkouts = useMemo(
+    () => monthWorkouts.filter((row) => row.workout_date === selectedKey),
+    [monthWorkouts, selectedKey]
+  );
+  const selectedDayEvents = useMemo(
+    () => monthEvents.filter((row) => ymdLocal(row.starts_at) === selectedKey),
+    [monthEvents, selectedKey]
+  );
+  const selectedDayAssignments = useMemo(
+    () => monthAssignments.filter((row) => row.scheduled_date === selectedKey),
+    [monthAssignments, selectedKey]
+  );
 
   const workoutCounts = useMemo(() => {
     const map: Record<string, { track: number; lift: number; total: number }> = {};
-    for (const w of monthWorkouts) {
-      const key = w.workout_date;
-      if (!map[key]) map[key] = { track: 0, lift: 0, total: 0 };
-      map[key][w.workout_type] += 1;
-      map[key].total += 1;
+    for (const workout of monthWorkouts) {
+      if (!map[workout.workout_date]) {
+        map[workout.workout_date] = { track: 0, lift: 0, total: 0 };
+      }
+      map[workout.workout_date][workout.workout_type] += 1;
+      map[workout.workout_date].total += 1;
     }
     return map;
   }, [monthWorkouts]);
 
   const eventCounts = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const e of monthEvents) {
-      const key = ymdLocal(e.starts_at);
+    for (const event of monthEvents) {
+      const key = ymdLocal(event.starts_at);
       map[key] = (map[key] ?? 0) + 1;
     }
     return map;
   }, [monthEvents]);
 
-  const selectedKey = useMemo(() => formatYMD(selectedDate), [selectedDate]);
+  const assignmentCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const assignment of monthAssignments) {
+      map[assignment.scheduled_date] = (map[assignment.scheduled_date] ?? 0) + 1;
+    }
+    return map;
+  }, [monthAssignments]);
 
   const loadMonth = useCallback(async () => {
     setError(null);
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const uid = userData.user?.id;
+      if (userError || !uid) throw userError ?? new Error("Not logged in");
 
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    const uid = userData.user?.id ?? null;
+      const startKey = formatYMD(startOfMonth(monthAnchor));
+      const endKey = formatYMD(endOfMonth(monthAnchor));
+      const startDate = startOfMonth(monthAnchor);
+      const endExclusive = new Date(
+        monthAnchor.getFullYear(),
+        monthAnchor.getMonth() + 1,
+        1
+      );
 
-    if (userErr || !uid) {
-      setError("Not logged in");
+      const [workoutsRes, eventsRes, assignments] = await Promise.all([
+        supabase
+          .from("workouts")
+          .select("id, workout_date, title, notes, workout_type")
+          .eq("user_id", uid)
+          .gte("workout_date", startKey)
+          .lte("workout_date", endKey)
+          .order("workout_date", { ascending: false })
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("calendar_events")
+          .select("id, title, notes, starts_at, ends_at")
+          .eq("user_id", uid)
+          .gte("starts_at", startDate.toISOString())
+          .lt("starts_at", endExclusive.toISOString())
+          .order("starts_at", { ascending: true }),
+        getAthleteAssignments({ startDate: startKey, endDate: endKey }),
+      ]);
+
+      if (workoutsRes.error) throw workoutsRes.error;
+      if (eventsRes.error) throw eventsRes.error;
+
+      setMonthWorkouts((workoutsRes.data ?? []) as Workout[]);
+      setMonthEvents((eventsRes.data ?? []) as EventRow[]);
+      setMonthAssignments(assignments);
+      void syncAthleteTrainingNotifications(assignments);
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
       setMonthWorkouts([]);
-      setSelectedDayWorkouts([]);
       setMonthEvents([]);
-      setSelectedDayEvents([]);
-      return;
+      setMonthAssignments([]);
     }
-
-    const startKey = formatYMD(startOfMonth(monthAnchor));
-    const endKey = formatYMD(endOfMonth(monthAnchor));
-
-    const { data: wData, error: wErr } = await supabase
-      .from("workouts")
-      .select("id, workout_date, title, notes, workout_type")
-      .eq("user_id", uid)
-      .gte("workout_date", startKey)
-      .lte("workout_date", endKey)
-      .order("workout_date", { ascending: false })
-      .order("created_at", { ascending: false });
-
-    if (wErr) {
-      setError("Error: " + wErr.message);
-      setMonthWorkouts([]);
-      setSelectedDayWorkouts([]);
-      setMonthEvents([]);
-      setSelectedDayEvents([]);
-      return;
-    }
-
-    const wRows = (wData ?? []) as Workout[];
-    setMonthWorkouts(wRows);
-
-    const startDate = startOfMonth(monthAnchor);
-    const endExclusive = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + 1, 1);
-
-    const { data: eData } = await supabase
-      .from("calendar_events")
-      .select("id, title, notes, starts_at, ends_at")
-      .eq("user_id", uid)
-      .gte("starts_at", startDate.toISOString())
-      .lt("starts_at", endExclusive.toISOString())
-      .order("starts_at", { ascending: true });
-
-    const eRows = (eData ?? []) as EventRow[];
-    setMonthEvents(eRows);
-
-    setSelectedDayWorkouts(wRows.filter((w) => w.workout_date === selectedKey));
-    setSelectedDayEvents(eRows.filter((e) => ymdLocal(e.starts_at) === selectedKey));
-
-  }, [monthAnchor, selectedKey]);
+  }, [monthAnchor]);
 
   useFocusEffect(
     useCallback(() => {
@@ -179,95 +204,64 @@ export default function CalendarScreen() {
     setRefreshing(false);
   }, [loadMonth]);
 
-  function selectDay(d: Date) {
-    setSelectedDate(d);
-    const key = formatYMD(d);
-    setSelectedDayWorkouts(monthWorkouts.filter((w) => w.workout_date === key));
-    setSelectedDayEvents(monthEvents.filter((e) => ymdLocal(e.starts_at) === key));
-  }
-
-  const prevMonth = useCallback(() => {
-    const next = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() - 1, 1);
-    setMonthAnchor(next);
-  }, [monthAnchor]);
+  const previousMonth = useCallback(() => {
+    setMonthAnchor(
+      (current) => new Date(current.getFullYear(), current.getMonth() - 1, 1)
+    );
+  }, []);
 
   const nextMonth = useCallback(() => {
-    const next = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + 1, 1);
-    setMonthAnchor(next);
-  }, [monthAnchor]);
+    setMonthAnchor(
+      (current) => new Date(current.getFullYear(), current.getMonth() + 1, 1)
+    );
+  }, []);
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gesture) => {
-          const { dx, dy } = gesture;
-          return Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy);
-        },
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          Math.abs(gesture.dx) > 12 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
         onPanResponderRelease: (_, gesture) => {
-          const { dx } = gesture;
-          if (dx > 60) prevMonth();
-          else if (dx < -60) nextMonth();
+          if (gesture.dx > 60) previousMonth();
+          else if (gesture.dx < -60) nextMonth();
         },
       }),
-    [prevMonth, nextMonth]
+    [nextMonth, previousMonth]
   );
 
   const dotTrack = c.dark ? "#34D399" : "green";
   const dotLift = c.dark ? "#60A5FA" : "blue";
 
   return (
-    <FormScreen
-      refreshControlProps={{
-        refreshing,
-        onRefresh,
-      }}
-    >
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+    <FormScreen refreshControlProps={{ refreshing, onRefresh }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
         <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Calendar</Text>
-        <PrimaryButton title="Add event" onPress={() => router.push(`/calendar/add-event?date=${selectedKey}`)} />
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <PrimaryButton title="Team training" onPress={() => router.push("/team-training")} />
+          <PrimaryButton title="Add event" onPress={() => router.push(`/calendar/add-event?date=${selectedKey}`)} />
+        </View>
       </View>
 
-      {error && (
-        <Text style={{ color: "#ef4444", fontWeight: "600" }}>
-          {error}
-        </Text>
-      )}
+      {error && <Text style={{ color: "#ef4444", fontWeight: "600" }}>{error}</Text>}
 
       <View
         {...panResponder.panHandlers}
-        style={{
-          borderWidth: 1,
-          borderColor: c.border,
-          backgroundColor: c.card,
-          borderRadius: 14,
-          padding: 14,
-          gap: 10,
-        }}
+        style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.card, borderRadius: 14, padding: 14, gap: 10 }}
       >
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Pressable onPress={prevMonth} style={{ padding: 8 }}>
+          <Pressable onPress={previousMonth} style={{ padding: 8 }}>
             <Text style={{ fontSize: 18, color: c.text }}>‹</Text>
           </Pressable>
-
           <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>{monthLabel}</Text>
-
           <Pressable onPress={nextMonth} style={{ padding: 8 }}>
             <Text style={{ fontSize: 18, color: c.text }}>›</Text>
           </Pressable>
         </View>
 
         <View style={{ flexDirection: "row" }}>
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((w) => (
-            <Text
-              key={w}
-              style={{
-                width: `${100 / 7}%`,
-                textAlign: "center",
-                fontSize: 12,
-                color: c.subtext,
-              }}
-            >
-              {w}
+          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((weekday) => (
+            <Text key={weekday} style={{ width: `${100 / 7}%`, textAlign: "center", fontSize: 12, color: c.subtext }}>
+              {weekday}
             </Text>
           ))}
         </View>
@@ -275,226 +269,109 @@ export default function CalendarScreen() {
         <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
           {grid.map(({ date, inMonth }) => {
             const key = formatYMD(date);
-
             const counts = workoutCounts[key];
-            const trackCount = counts?.track ?? 0;
-            const liftCount = counts?.lift ?? 0;
-            const total = counts?.total ?? 0;
-
-            const hasEvent = (eventCounts[key] ?? 0) > 0;
-
             const selected = isSameDay(date, selectedDate);
             const isToday = isSameDay(date, today);
+            const hasEvent = (eventCounts[key] ?? 0) > 0;
+            const hasAssignment = (assignmentCounts[key] ?? 0) > 0;
 
             return (
               <Pressable
                 key={date.toISOString()}
-                onPress={() => selectDay(date)}
-                style={{
-                  width: `${100 / 7}%`,
-                  paddingVertical: 10,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  opacity: inMonth ? 1 : 0.35,
-                }}
+                onPress={() => setSelectedDate(date)}
+                style={{ width: `${100 / 7}%`, paddingVertical: 10, alignItems: "center", opacity: inMonth ? 1 : 0.35 }}
               >
-                {hasEvent && (
-                  <View
-                    style={{
-                      position: "absolute",
-                      top: 1,
-                      alignSelf: "center",
-                      width: 6,
-                      height: 6,
-                      borderRadius: 999,
-                      backgroundColor: c.primary,
-                      opacity: selected ? 1 : 0.75,
-                    }}
-                  />
-                )}
+                <View style={{ position: "absolute", top: 1, flexDirection: "row", gap: 3 }}>
+                  {hasEvent && <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: c.primary }} />}
+                  {hasAssignment && <View style={{ width: 6, height: 6, borderRadius: 999, borderWidth: 1, borderColor: c.primary, backgroundColor: c.card }} />}
+                </View>
 
-                <View
-                  style={{
-                    minWidth: 32,
-                    height: 32,
-                    borderRadius: 999,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderWidth: selected ? 2 : isToday ? 1 : 0,
-                    borderColor: selected ? c.primary : c.border,
-                    backgroundColor: selected ? c.primary : "transparent",
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: selected ? c.primaryText : c.text,
-                      fontWeight: selected ? "800" : "400",
-                    }}
-                  >
+                <View style={{ minWidth: 32, height: 32, borderRadius: 999, alignItems: "center", justifyContent: "center", borderWidth: selected ? 2 : isToday ? 1 : 0, borderColor: selected ? c.primary : c.border, backgroundColor: selected ? c.primary : "transparent" }}>
+                  <Text style={{ color: selected ? c.primaryText : c.text, fontWeight: selected ? "800" : "400" }}>
                     {date.getDate()}
                   </Text>
                 </View>
 
-                {total > 0 && (
-                  <View style={{ marginTop: 4, alignItems: "center", justifyContent: "center" }}>
-                    {total <= 2 ? (
-                      <View style={{ flexDirection: "row", gap: 4 }}>
-                        {trackCount >= 1 && (
-                          <View
-                            style={{
-                              width: 6,
-                              height: 6,
-                              borderRadius: 999,
-                              backgroundColor: dotTrack,
-                              opacity: selected ? 0.95 : 0.7,
-                            }}
-                          />
-                        )}
-                        {trackCount >= 2 && (
-                          <View
-                            style={{
-                              width: 6,
-                              height: 6,
-                              borderRadius: 999,
-                              backgroundColor: dotTrack,
-                              opacity: selected ? 0.95 : 0.7,
-                            }}
-                          />
-                        )}
-                        {liftCount >= 1 && (
-                          <View
-                            style={{
-                              width: 6,
-                              height: 6,
-                              borderRadius: 999,
-                              backgroundColor: dotLift,
-                              opacity: selected ? 0.95 : 0.7,
-                            }}
-                          />
-                        )}
-                        {liftCount >= 2 && (
-                          <View
-                            style={{
-                              width: 6,
-                              height: 6,
-                              borderRadius: 999,
-                              backgroundColor: dotLift,
-                              opacity: selected ? 0.95 : 0.7,
-                            }}
-                          />
-                        )}
-                      </View>
-                    ) : (
-                      <View
-                        style={{
-                          borderWidth: 1,
-                          borderColor: c.border,
-                          borderRadius: 999,
-                          paddingHorizontal: 6,
-                          paddingVertical: 1,
-                          opacity: selected ? 1 : 0.9,
-                          backgroundColor: c.bg,
-                        }}
-                      >
-                        <Text style={{ fontSize: 10, fontWeight: "800", color: c.text }}>{total}</Text>
-                      </View>
-                    )}
+                {(counts?.total ?? 0) > 0 && (
+                  <View style={{ flexDirection: "row", gap: 3, marginTop: 4 }}>
+                    {(counts?.track ?? 0) > 0 && <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: dotTrack }} />}
+                    {(counts?.lift ?? 0) > 0 && <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: dotLift }} />}
+                    {(counts?.total ?? 0) > 2 && <Text style={{ fontSize: 10, fontWeight: "800", color: c.subtext }}>{counts?.total}</Text>}
                   </View>
                 )}
               </Pressable>
             );
           })}
         </View>
+
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+          <Text style={{ color: c.subtext }}>● personal event</Text>
+          <Text style={{ color: c.subtext }}>○ assigned workout</Text>
+          <Text style={{ color: c.subtext }}>● logged workout</Text>
+        </View>
       </View>
 
-      <View
-        style={{
-          borderWidth: 1,
-          borderColor: c.border,
-          backgroundColor: c.card,
-          borderRadius: 14,
-          padding: 14,
-          gap: 12,
-        }}
-      >
+      <View style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.card, borderRadius: 14, padding: 14, gap: 12 }}>
         <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>
           {selectedDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
         </Text>
 
-        {!!selectedDayEvents.length && (
+        {selectedDayAssignments.length > 0 && (
+          <View style={{ gap: 8 }}>
+            <Text style={{ fontWeight: "800", color: c.text }}>Assigned workouts</Text>
+            {selectedDayAssignments.map((assignment) => (
+              <Pressable
+                key={assignment.assignment_recipient_id}
+                onPress={() => router.push(`/team-training/assignment/${assignment.assignment_recipient_id}`)}
+                style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, borderRadius: 14, padding: 12, gap: 5 }}
+              >
+                <Text style={{ fontWeight: "800", color: c.text }}>{assignment.title_snapshot}</Text>
+                <Text style={{ color: c.subtext }}>
+                  {assignment.team_name ?? "Team"} · {assignmentStatus(assignment)}
+                </Text>
+                <Text style={{ fontWeight: "700", color: c.text }}>Open assignment →</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
+        {selectedDayEvents.length > 0 && (
           <View style={{ gap: 8 }}>
             <Text style={{ fontWeight: "800", color: c.text }}>Events</Text>
-            {selectedDayEvents.map((e) => (
-              <Pressable
-                key={e.id}
-                onPress={() => router.push(`/calendar/event/${e.id}`)}
-                style={{
-                  borderWidth: 1,
-                  borderColor: c.border,
-                  backgroundColor: c.bg,
-                  borderRadius: 14,
-                  padding: 12,
-                  gap: 6,
-                }}
-              >
+            {selectedDayEvents.map((event) => (
+              <Pressable key={event.id} onPress={() => router.push(`/calendar/event/${event.id}`)} style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, borderRadius: 14, padding: 12, gap: 5 }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 10 }}>
-                  <Text style={{ fontWeight: "800", color: c.text, flex: 1 }}>{e.title}</Text>
-                  <Text style={{ color: c.subtext }}>{formatEventTime(e.starts_at)}</Text>
+                  <Text style={{ fontWeight: "800", color: c.text, flex: 1 }}>{event.title}</Text>
+                  <Text style={{ color: c.subtext }}>{formatEventTime(event.starts_at)}</Text>
                 </View>
-
-                {!!e.notes && (
-                  <Text numberOfLines={2} style={{ color: c.subtext }}>
-                    {e.notes}
-                  </Text>
-                )}
-
+                {!!event.notes && <Text numberOfLines={2} style={{ color: c.subtext }}>{event.notes}</Text>}
                 <Text style={{ fontWeight: "700", color: c.text }}>View event →</Text>
               </Pressable>
             ))}
           </View>
         )}
 
-        {!!selectedDayWorkouts.length && (
+        {selectedDayWorkouts.length > 0 && (
           <View style={{ gap: 8 }}>
             <Text style={{ fontWeight: "800", color: c.text }}>Workouts</Text>
-            {selectedDayWorkouts.map((w) => (
-              <Pressable
-                key={w.id}
-                onPress={() => router.push(`/workout/${w.id}`)}
-                style={{
-                  borderWidth: 1,
-                  borderColor: c.border,
-                  backgroundColor: c.bg,
-                  borderRadius: 14,
-                  padding: 12,
-                  gap: 6,
-                }}
-              >
-                <Text style={{ fontWeight: "800", color: c.text }}>{w.title}</Text>
-                {!!w.notes && (
-                  <Text numberOfLines={2} style={{ color: c.subtext }}>
-                    {w.notes}
-                  </Text>
-                )}
+            {selectedDayWorkouts.map((workout) => (
+              <Pressable key={workout.id} onPress={() => router.push(`/workout/${workout.id}`)} style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, borderRadius: 14, padding: 12, gap: 5 }}>
+                <Text style={{ fontWeight: "800", color: c.text }}>{workout.title}</Text>
+                {!!workout.notes && <Text numberOfLines={2} style={{ color: c.subtext }}>{workout.notes}</Text>}
                 <Text style={{ fontWeight: "700", color: c.text }}>View workout →</Text>
               </Pressable>
             ))}
           </View>
         )}
 
-        {!selectedDayEvents.length && !selectedDayWorkouts.length && (
-          <>
-            <Text style={{ color: c.subtext }}>No events or workouts logged for this day.</Text>
-            <View style={{ gap: 8 }}>
-              <PrimaryButton title="Add event" onPress={() => router.push(`/calendar/add-event?date=${selectedKey}`)} />
-              <PrimaryButton title="Log workout for this day" onPress={() => router.push(`/modal?date=${selectedKey}`)} />
-            </View>
-          </>
+        {selectedDayAssignments.length === 0 && selectedDayEvents.length === 0 && selectedDayWorkouts.length === 0 && (
+          <Text style={{ color: c.subtext }}>No events, assigned workouts, or logged workouts for this day.</Text>
         )}
 
-        {(selectedDayEvents.length > 0 || selectedDayWorkouts.length > 0) && (
+        <View style={{ gap: 8 }}>
+          <PrimaryButton title="Log workout for this day" onPress={() => router.push(`/modal?date=${selectedKey}`)} />
           <PrimaryButton title="View full day" onPress={() => router.push(`/calendar/${selectedKey}`)} />
-        )}
+        </View>
       </View>
     </FormScreen>
   );
