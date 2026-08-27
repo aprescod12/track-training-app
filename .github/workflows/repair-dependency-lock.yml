@@ -1,0 +1,102 @@
+name: Repair dependency lock
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - ".github/workflows/repair-dependency-lock.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  repair-lock:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.1"
+          cache: npm
+
+      - name: Restore pre-audit Expo 54 lock baseline
+        run: git show caadc6f89422012a1207f4a2c3972fbbe2be0843:package-lock.json > package-lock.json
+
+      - name: Resolve guarded security overrides
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Verify dependency graph
+        run: |
+          node <<'NODE'
+          const lock = require('./package-lock.json');
+          const packages = lock.packages || {};
+
+          const routerEntries = Object.entries(packages)
+            .filter(([path]) => path === 'node_modules/expo-router' || path.endsWith('/node_modules/expo-router'))
+            .map(([path, meta]) => ({ path, version: meta.version }));
+
+          if (!routerEntries.length) {
+            throw new Error('expo-router is missing from the repaired lockfile');
+          }
+
+          const incompatibleRouters = routerEntries.filter(
+            ({ version }) => typeof version !== 'string' || !version.startsWith('6.')
+          );
+
+          if (incompatibleRouters.length) {
+            throw new Error(`Incompatible Expo Router entries: ${JSON.stringify(incompatibleRouters)}`);
+          }
+
+          const shellQuote = packages['node_modules/shell-quote']?.version;
+          if (shellQuote !== '1.10.0') {
+            throw new Error(`Expected shell-quote 1.10.0, got ${shellQuote}`);
+          }
+
+          const tar = packages['node_modules/tar']?.version;
+          if (tar !== '7.5.22') {
+            throw new Error(`Expected tar 7.5.22, got ${tar}`);
+          }
+
+          console.log('Expo Router entries:', routerEntries);
+          console.log('shell-quote:', shellQuote);
+          console.log('tar:', tar);
+          NODE
+
+      - name: Install repaired dependency graph
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Validate Expo configuration
+        run: npm run validate:expo
+
+      - name: Production bundle export
+        run: npm run export:ci
+
+      - name: Commit repaired lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json is already repaired"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "fix(deps): restore Expo 54 dependency graph"
+          git push origin HEAD:main
