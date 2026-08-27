@@ -5,6 +5,7 @@ import FormScreen from "../../components/FormScreen";
 import PrimaryButton from "../../components/PrimaryButton";
 import { supabase } from "../../lib/supabase";
 import { formatYMD } from "../../lib/date";
+import { toAppError } from "../../lib/errors";
 import { useAppColors } from "../../lib/theme";
 import {
   getAthleteAssignments,
@@ -184,8 +185,12 @@ export default function CalendarScreen() {
       setMonthEvents((eventsRes.data ?? []) as EventRow[]);
       setMonthAssignments(assignments);
       void syncAthleteTrainingNotifications(assignments);
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
+    } catch (error: unknown) {
+      setError(
+        toAppError(error, {
+          fallbackMessage: "Could not load your calendar. Pull to refresh and try again.",
+        }).message
+      );
       setMonthWorkouts([]);
       setMonthEvents([]);
       setMonthAssignments([]);
