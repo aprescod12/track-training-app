@@ -17,6 +17,10 @@ import {
   type TeamGroup,
   type WorkoutTemplate,
 } from "../../lib/training";
+import {
+  coachHasTrainingPermission,
+  getMyCoachTrainingPermissions,
+} from "../../lib/teams";
 
 type TargetMode = "athletes" | "group" | "team";
 
@@ -25,6 +29,7 @@ export default function AssignWorkoutScreen() {
   const [teams, setTeams] = useState<CoachTeam[]>([]);
   const [teamId, setTeamId] = useState("");
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+  const [viewOnlyTemplateCount, setViewOnlyTemplateCount] = useState(0);
   const [templateId, setTemplateId] = useState("");
   const [athletes, setAthletes] = useState<CoachAthlete[]>([]);
   const [groups, setGroups] = useState<TeamGroup[]>([]);
@@ -58,6 +63,7 @@ export default function AssignWorkoutScreen() {
   useEffect(() => {
     if (!teamId) {
       setTemplates([]);
+      setViewOnlyTemplateCount(0);
       setAthletes([]);
       setGroups([]);
       return;
@@ -70,11 +76,16 @@ export default function AssignWorkoutScreen() {
       getWorkoutTemplates(teamId),
       getCoachAthletes(teamId),
       getTeamGroups(teamId),
+      getMyCoachTrainingPermissions(teamId),
     ])
-      .then(([templateRows, athleteRows, groupRows]) => {
+      .then(([templateRows, athleteRows, groupRows, permissions]) => {
         if (cancelled) return;
-        setTemplates(templateRows);
-        setTemplateId(templateRows[0]?.id ?? "");
+        const permittedTemplates = templateRows.filter((template) =>
+          coachHasTrainingPermission(permissions, template.workout_type, "prescribe")
+        );
+        setTemplates(permittedTemplates);
+        setViewOnlyTemplateCount(templateRows.length - permittedTemplates.length);
+        setTemplateId(permittedTemplates[0]?.id ?? "");
         setAthletes(athleteRows);
         setGroups(groupRows);
         setGroupId(groupRows[0]?.id ?? "");
@@ -108,7 +119,7 @@ export default function AssignWorkoutScreen() {
 
   async function assign() {
     if (!teamId || !templateId || !scheduledDate.trim()) {
-      setError("Team, template, and scheduled date are required.");
+      setError("Team, authorized template, and scheduled date are required.");
       return;
     }
     if (targetMode === "athletes" && selectedAthletes.length === 0) {
@@ -136,7 +147,7 @@ export default function AssignWorkoutScreen() {
     } catch (error: unknown) {
       setError(
         toAppError(error, {
-          fallbackMessage: "Could not create the assignment. Check the recipients and try again.",
+          fallbackMessage: "Could not create the assignment. Check the recipients and your training authority, then try again.",
         }).message
       );
     } finally {
@@ -149,7 +160,7 @@ export default function AssignWorkoutScreen() {
       <View style={{ gap: 4 }}>
         <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Assign workout</Text>
         <Text style={{ color: c.subtext }}>
-          The assignment is created only if you are explicitly authorized for every resulting athlete.
+          Assign only within your Track/Lift authority and only to athletes explicitly assigned to you.
         </Text>
       </View>
 
@@ -171,7 +182,13 @@ export default function AssignWorkoutScreen() {
 
             <Text style={{ fontWeight: "800", color: c.text }}>Template</Text>
             {templates.length === 0 ? (
-              <Text style={{ color: c.subtext }}>{loadingOptions ? "Loading templates…" : "Create a template before assigning training."}</Text>
+              <Text style={{ color: c.subtext }}>
+                {loadingOptions
+                  ? "Loading templates…"
+                  : viewOnlyTemplateCount > 0
+                    ? "This team has templates, but none are in a training domain you are authorized to prescribe."
+                    : "Create an authorized template before assigning training."}
+              </Text>
             ) : (
               templates.map((template) => (
                 <Pressable key={template.id} onPress={() => setTemplateId(template.id)} style={{ borderWidth: 1, borderColor: c.border, borderRadius: 12, padding: 10, backgroundColor: templateId === template.id ? c.primary : c.bg }}>
@@ -179,6 +196,11 @@ export default function AssignWorkoutScreen() {
                   <Text style={{ color: templateId === template.id ? c.primaryText : c.subtext }}>{template.workout_type === "lift" ? "Lift" : "Track"}</Text>
                 </Pressable>
               ))
+            )}
+            {viewOnlyTemplateCount > 0 && templates.length > 0 && (
+              <Text style={{ color: c.subtext, fontSize: 12 }}>
+                {viewOnlyTemplateCount} template{viewOnlyTemplateCount === 1 ? " is" : "s are"} hidden here because you have view-only access to that training domain.
+              </Text>
             )}
 
             <Text style={{ fontWeight: "800", color: c.text }}>Scheduled date</Text>
