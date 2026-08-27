@@ -97,14 +97,28 @@ export default function TeamTrainingScreen() {
   ).length;
 
   return (
-    <FormScreen refreshControlProps={{ refreshing, onRefresh }}>
-      <View style={{ gap: 4 }}>
-        <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>
-          Team Training
-        </Text>
-        <Text style={{ color: c.subtext }}>
-          Scheduled team workouts, athlete submissions, and coach review.
-        </Text>
+    <FormScreen
+      refreshControlProps={{ refreshing, onRefresh }}
+      contentContainerStyle={{ width: "100%", maxWidth: 1040, alignSelf: "center" }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 10,
+        }}
+      >
+        <View style={{ gap: 4, flex: 1, minWidth: 220 }}>
+          <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>
+            Team Training
+          </Text>
+          <Text style={{ color: c.subtext }}>
+            Scheduled team workouts, athlete submissions, and coach review.
+          </Text>
+        </View>
+        <PrimaryButton title="Manage teams" onPress={() => router.push("/teams")} />
       </View>
 
       {error && (
@@ -257,13 +271,14 @@ export default function TeamTrainingScreen() {
             backgroundColor: c.card,
             borderRadius: 14,
             padding: 14,
-            gap: 6,
+            gap: 8,
           }}
         >
           <Text style={{ color: c.text, fontWeight: "800" }}>No team training workspace yet</Text>
           <Text style={{ color: c.subtext }}>
-            Team assignments will appear here once you are an assigned athlete or an explicitly authorized coach.
+            Create or join a team first. Training assignments appear only after team membership and explicit coach-athlete authorization are configured.
           </Text>
+          <PrimaryButton title="Create or manage teams" onPress={() => router.push("/teams")} />
         </View>
       )}
     </FormScreen>
