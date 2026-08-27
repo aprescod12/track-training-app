@@ -7,12 +7,17 @@ import PrimaryButton from "../../components/PrimaryButton";
 import { toAppError } from "../../lib/errors";
 import {
   assignCoachToAthlete,
+  createTeamGroup,
   endCoachAthleteAssignment,
   getTeamWorkspace,
   inviteTeamMember,
+  setCoachTrainingScope,
+  setTeamGroupMembership,
+  updateTeamMemberRoleTitle,
   type TeamMember,
   type TeamMemberType,
   type TeamWorkspace,
+  type TrainingWorkoutType,
 } from "../../lib/teams";
 import { useAppColors } from "../../lib/theme";
 
@@ -20,6 +25,11 @@ const memberTypeOptions: { value: TeamMemberType; label: string }[] = [
   { value: "athlete", label: "Athlete" },
   { value: "coach", label: "Coach" },
   { value: "staff", label: "Staff" },
+];
+
+const trainingScopes: { value: TrainingWorkoutType; label: string }[] = [
+  { value: "track", label: "Track" },
+  { value: "lift", label: "Lift" },
 ];
 
 function memberName(member: TeamMember) {
@@ -35,13 +45,23 @@ export default function TeamDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteType, setInviteType] = useState<TeamMemberType>("athlete");
+  const [groupName, setGroupName] = useState("");
+  const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!teamId) return;
     setError(null);
     try {
-      setWorkspace(await getTeamWorkspace(teamId));
+      const next = await getTeamWorkspace(teamId);
+      setWorkspace(next);
+      setRoleDrafts(
+        Object.fromEntries(
+          next.members
+            .filter((member) => member.member_type === "coach")
+            .map((member) => [member.membership_id, member.role_title ?? ""])
+        )
+      );
     } catch (error: unknown) {
       setWorkspace(null);
       setError(
@@ -77,23 +97,94 @@ export default function TeamDetailScreen() {
     [workspace]
   );
 
-  async function sendInvitation() {
-    if (!teamId) return;
-    setBusyKey("invite");
+  async function runMutation(key: string, action: () => Promise<void>, fallbackMessage: string) {
+    setBusyKey(key);
     setError(null);
     try {
-      await inviteTeamMember({ teamId, email: inviteEmail, memberType: inviteType });
-      setInviteEmail("");
+      await action();
       await load();
     } catch (error: unknown) {
-      setError(
-        toAppError(error, {
-          fallbackMessage: "Could not send the team invitation. Check the email and try again.",
-        }).message
-      );
+      setError(toAppError(error, { fallbackMessage }).message);
     } finally {
       setBusyKey(null);
     }
+  }
+
+  async function sendInvitation() {
+    if (!teamId) return;
+    await runMutation(
+      "invite",
+      async () => {
+        await inviteTeamMember({ teamId, email: inviteEmail, memberType: inviteType });
+        setInviteEmail("");
+      },
+      "Could not send the team invitation. Check the email and try again."
+    );
+  }
+
+  async function addGroup() {
+    if (!teamId) return;
+    await runMutation(
+      "create-group",
+      async () => {
+        await createTeamGroup({ teamId, name: groupName, groupType: "event_group" });
+        setGroupName("");
+      },
+      "Could not create the training group. Please try again."
+    );
+  }
+
+  async function toggleGroupMember(groupId: string, member: TeamMember) {
+    if (!teamId || !workspace) return;
+    const selected = workspace.groupMemberships.some(
+      (row) => row.group_id === groupId && row.team_membership_id === member.membership_id
+    );
+    const key = `group:${groupId}:${member.membership_id}`;
+    await runMutation(
+      key,
+      () =>
+        setTeamGroupMembership({
+          teamId,
+          groupId,
+          teamMembershipId: member.membership_id,
+          enabled: !selected,
+        }),
+      "Could not update this group membership. Please try again."
+    );
+  }
+
+  async function toggleTrainingScope(coach: TeamMember, workoutType: TrainingWorkoutType) {
+    if (!teamId || !workspace) return;
+    const permission = workspace.coachTrainingPermissions.find(
+      (row) =>
+        row.coach_membership_id === coach.membership_id && row.workout_type === workoutType
+    );
+    const selected = !!permission?.can_prescribe && !!permission?.can_review;
+    const key = `scope:${coach.membership_id}:${workoutType}`;
+    await runMutation(
+      key,
+      () =>
+        setCoachTrainingScope({
+          teamId,
+          coachMembershipId: coach.membership_id,
+          workoutType,
+          enabled: !selected,
+        }),
+      "Could not update this coach's training authority. Please try again."
+    );
+  }
+
+  async function saveRoleTitle(coach: TeamMember) {
+    const key = `title:${coach.membership_id}`;
+    await runMutation(
+      key,
+      () =>
+        updateTeamMemberRoleTitle({
+          membershipId: coach.membership_id,
+          roleTitle: roleDrafts[coach.membership_id] ?? null,
+        }),
+      "Could not update the coaching title. Please try again."
+    );
   }
 
   async function toggleCoaching(coach: TeamMember, athlete: TeamMember) {
@@ -104,29 +195,22 @@ export default function TeamDetailScreen() {
         row.athlete_membership_id === athlete.membership_id &&
         row.active
     );
-    const key = `${coach.membership_id}:${athlete.membership_id}`;
-    setBusyKey(key);
-    setError(null);
-    try {
-      if (existing) {
-        await endCoachAthleteAssignment(existing.id);
-      } else {
-        await assignCoachToAthlete({
-          teamId,
-          coachMembershipId: coach.membership_id,
-          athleteMembershipId: athlete.membership_id,
-        });
-      }
-      await load();
-    } catch (error: unknown) {
-      setError(
-        toAppError(error, {
-          fallbackMessage: "Could not update coaching access. Please try again.",
-        }).message
-      );
-    } finally {
-      setBusyKey(null);
-    }
+    const key = `athlete:${coach.membership_id}:${athlete.membership_id}`;
+    await runMutation(
+      key,
+      async () => {
+        if (existing) {
+          await endCoachAthleteAssignment(existing.id);
+        } else {
+          await assignCoachToAthlete({
+            teamId,
+            coachMembershipId: coach.membership_id,
+            athleteMembershipId: athlete.membership_id,
+          });
+        }
+      },
+      "Could not update athlete visibility. Please try again."
+    );
   }
 
   const inputStyle = {
@@ -137,6 +221,15 @@ export default function TeamDetailScreen() {
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 11,
+  } as const;
+
+  const sectionStyle = {
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.card,
+    borderRadius: 14,
+    padding: 14,
+    gap: 10,
   } as const;
 
   return (
@@ -170,21 +263,12 @@ export default function TeamDetailScreen() {
           {error && <Text style={{ color: "#ef4444", fontWeight: "600" }}>{error}</Text>}
 
           {canManage && (
-            <View
-              style={{
-                borderWidth: 1,
-                borderColor: c.border,
-                backgroundColor: c.card,
-                borderRadius: 14,
-                padding: 14,
-                gap: 10,
-              }}
-            >
+            <View style={sectionStyle}>
               <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>
                 Add team member
               </Text>
               <Text style={{ color: c.subtext }}>
-                Invite by account email. Membership does not automatically create a friendship or grant a coach access to athlete training.
+                Invite by account email. Membership does not create a friendship or grant training access.
               </Text>
               <TextInput
                 value={inviteEmail}
@@ -212,9 +296,7 @@ export default function TeamDetailScreen() {
                         paddingVertical: 9,
                       }}
                     >
-                      <Text
-                        style={{ color: selected ? c.primaryText : c.text, fontWeight: "700" }}
-                      >
+                      <Text style={{ color: selected ? c.primaryText : c.text, fontWeight: "700" }}>
                         {option.label}
                       </Text>
                     </Pressable>
@@ -228,16 +310,7 @@ export default function TeamDetailScreen() {
             </View>
           )}
 
-          <View
-            style={{
-              borderWidth: 1,
-              borderColor: c.border,
-              backgroundColor: c.card,
-              borderRadius: 14,
-              padding: 14,
-              gap: 10,
-            }}
-          >
+          <View style={sectionStyle}>
             <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>
               Roster · {workspace.members.length}
             </Text>
@@ -258,11 +331,9 @@ export default function TeamDetailScreen() {
                 <Avatar uri={member.avatar_url} name={memberName(member)} size={42} />
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={{ color: c.text, fontWeight: "800" }}>{memberName(member)}</Text>
-                  {!!member.username && (
-                    <Text style={{ color: c.subtext }}>@{member.username}</Text>
-                  )}
+                  {!!member.username && <Text style={{ color: c.subtext }}>@{member.username}</Text>}
                   <Text style={{ color: c.subtext, textTransform: "capitalize" }}>
-                    {member.member_type}
+                    {member.role_title || member.member_type}
                     {member.management_role !== "member" ? ` · ${member.management_role}` : ""}
                   </Text>
                 </View>
@@ -270,22 +341,205 @@ export default function TeamDetailScreen() {
             ))}
           </View>
 
-          {canManage && coaches.length > 0 && athletes.length > 0 && (
-            <View
-              style={{
-                borderWidth: 1,
-                borderColor: c.border,
-                backgroundColor: c.card,
-                borderRadius: 14,
-                padding: 14,
-                gap: 10,
-              }}
-            >
+          <View style={sectionStyle}>
+            <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>Training groups</Text>
+            <Text style={{ color: c.subtext }}>
+              Organize athletes and staff into groups such as Sprints, Distance, Jumps, or Throws. Sharing a group never grants a coach access to athlete training.
+            </Text>
+            {canManage && (
+              <View style={{ gap: 8 }}>
+                <TextInput
+                  value={groupName}
+                  onChangeText={setGroupName}
+                  placeholder="e.g. Sprints"
+                  placeholderTextColor={c.subtext}
+                  style={inputStyle}
+                />
+                <PrimaryButton
+                  title={busyKey === "create-group" ? "Creating…" : "Create group"}
+                  onPress={busyKey === "create-group" ? () => {} : addGroup}
+                />
+              </View>
+            )}
+            {workspace.groups.length === 0 ? (
+              <Text style={{ color: c.subtext }}>No training groups yet.</Text>
+            ) : (
+              workspace.groups.map((group) => {
+                const selectedMembers = workspace.members.filter((member) =>
+                  workspace.groupMemberships.some(
+                    (row) =>
+                      row.group_id === group.id && row.team_membership_id === member.membership_id
+                  )
+                );
+                return (
+                  <View
+                    key={group.id}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: c.border,
+                      backgroundColor: c.bg,
+                      borderRadius: 12,
+                      padding: 11,
+                      gap: 8,
+                    }}
+                  >
+                    <Text style={{ color: c.text, fontWeight: "800" }}>{group.name}</Text>
+                    {canManage ? (
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                        {workspace.members.map((member) => {
+                          const selected = selectedMembers.some(
+                            (selectedMember) =>
+                              selectedMember.membership_id === member.membership_id
+                          );
+                          const key = `group:${group.id}:${member.membership_id}`;
+                          return (
+                            <Pressable
+                              key={member.membership_id}
+                              onPress={busyKey === key ? () => {} : () => toggleGroupMember(group.id, member)}
+                              style={{
+                                borderWidth: 1,
+                                borderColor: selected ? c.primary : c.border,
+                                backgroundColor: selected ? c.primary : c.card,
+                                borderRadius: 999,
+                                paddingHorizontal: 12,
+                                paddingVertical: 8,
+                              }}
+                            >
+                              <Text style={{ color: selected ? c.primaryText : c.text, fontWeight: "700" }}>
+                                {busyKey === key ? "Updating…" : `${selected ? "✓ " : ""}${memberName(member)}`}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    ) : (
+                      <Text style={{ color: c.subtext }}>
+                        {selectedMembers.length
+                          ? selectedMembers.map(memberName).join(", ")
+                          : "No members assigned yet."}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })
+            )}
+          </View>
+
+          {coaches.length > 0 && (
+            <View style={sectionStyle}>
               <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>
-                Coaching access
+                Coach responsibilities
               </Text>
               <Text style={{ color: c.subtext }}>
-                Explicitly authorize which coaches are assigned to which athletes. This is separate from team membership and is required for team-context training access.
+                Training authority controls which domains a coach may prescribe and formally review. Explicitly assigned coaches can still view both Track and Lift context for their athletes.
+              </Text>
+              {coaches.map((coach) => {
+                const coachGroups = workspace.groups.filter((group) =>
+                  workspace.groupMemberships.some(
+                    (row) =>
+                      row.group_id === group.id && row.team_membership_id === coach.membership_id
+                  )
+                );
+                return (
+                  <View
+                    key={coach.membership_id}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: c.border,
+                      backgroundColor: c.bg,
+                      borderRadius: 12,
+                      padding: 12,
+                      gap: 9,
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                      <Avatar uri={coach.avatar_url} name={memberName(coach)} size={40} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: c.text, fontWeight: "800" }}>{memberName(coach)}</Text>
+                        <Text style={{ color: c.subtext }}>
+                          {coachGroups.length ? coachGroups.map((group) => group.name).join(" · ") : "No group assigned"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {canManage ? (
+                      <View style={{ gap: 7 }}>
+                        <TextInput
+                          value={roleDrafts[coach.membership_id] ?? ""}
+                          onChangeText={(value) =>
+                            setRoleDrafts((current) => ({ ...current, [coach.membership_id]: value }))
+                          }
+                          placeholder="e.g. Assistant Coach - Sprints"
+                          placeholderTextColor={c.subtext}
+                          style={inputStyle}
+                        />
+                        <Pressable
+                          onPress={
+                            busyKey === `title:${coach.membership_id}`
+                              ? () => {}
+                              : () => saveRoleTitle(coach)
+                          }
+                          style={{ alignSelf: "flex-start", paddingVertical: 4 }}
+                        >
+                          <Text style={{ color: c.primary, fontWeight: "800" }}>
+                            {busyKey === `title:${coach.membership_id}` ? "Saving…" : "Save title"}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    ) : (
+                      !!coach.role_title && <Text style={{ color: c.text }}>{coach.role_title}</Text>
+                    )}
+
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                      {trainingScopes.map((scope) => {
+                        const permission = workspace.coachTrainingPermissions.find(
+                          (row) =>
+                            row.coach_membership_id === coach.membership_id &&
+                            row.workout_type === scope.value
+                        );
+                        const selected = !!permission?.can_prescribe && !!permission?.can_review;
+                        const key = `scope:${coach.membership_id}:${scope.value}`;
+                        return (
+                          <Pressable
+                            key={scope.value}
+                            disabled={!canManage}
+                            onPress={
+                              !canManage || busyKey === key
+                                ? () => {}
+                                : () => toggleTrainingScope(coach, scope.value)
+                            }
+                            style={{
+                              borderWidth: 1,
+                              borderColor: selected ? c.primary : c.border,
+                              backgroundColor: selected ? c.primary : c.card,
+                              borderRadius: 999,
+                              paddingHorizontal: 13,
+                              paddingVertical: 8,
+                            }}
+                          >
+                            <Text style={{ color: selected ? c.primaryText : c.text, fontWeight: "800" }}>
+                              {busyKey === key ? "Updating…" : `${selected ? "✓ " : ""}${scope.label}`}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <Text style={{ color: c.subtext, fontSize: 12 }}>
+                      Selected domains allow prescription creation/changes and formal review. Athlete-owned workout logs remain read-only to coaches.
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {canManage && coaches.length > 0 && athletes.length > 0 && (
+            <View style={sectionStyle}>
+              <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>
+                Athlete visibility
+              </Text>
+              <Text style={{ color: c.subtext }}>
+                Explicitly choose which athletes each coach may see. This is independent from groups and training authority. Once assigned, the coach may view that athlete's team-context Track and Lift data, but may only prescribe or formally review enabled domains.
               </Text>
               {athletes.map((athlete) => (
                 <View
@@ -308,7 +562,7 @@ export default function TeamDetailScreen() {
                           row.coach_membership_id === coach.membership_id &&
                           row.athlete_membership_id === athlete.membership_id
                       );
-                      const key = `${coach.membership_id}:${athlete.membership_id}`;
+                      const key = `athlete:${coach.membership_id}:${athlete.membership_id}`;
                       const selected = !!assignment;
                       return (
                         <Pressable
@@ -323,12 +577,7 @@ export default function TeamDetailScreen() {
                             paddingVertical: 8,
                           }}
                         >
-                          <Text
-                            style={{
-                              color: selected ? c.primaryText : c.text,
-                              fontWeight: "700",
-                            }}
-                          >
+                          <Text style={{ color: selected ? c.primaryText : c.text, fontWeight: "700" }}>
                             {busyKey === key ? "Updating…" : `${selected ? "✓ " : ""}${memberName(coach)}`}
                           </Text>
                         </Pressable>
@@ -341,16 +590,7 @@ export default function TeamDetailScreen() {
           )}
 
           {canManage && workspace.invitations.length > 0 && (
-            <View
-              style={{
-                borderWidth: 1,
-                borderColor: c.border,
-                backgroundColor: c.card,
-                borderRadius: 14,
-                padding: 14,
-                gap: 8,
-              }}
-            >
+            <View style={sectionStyle}>
               <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>
                 Pending invitations
               </Text>
