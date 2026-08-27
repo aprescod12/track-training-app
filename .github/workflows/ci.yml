@@ -52,3 +52,6 @@ jobs:
 
       - name: Lint database schema
         run: supabase db lint --fail-on error
+
+      - name: Run database authorization tests
+        run: supabase test db
