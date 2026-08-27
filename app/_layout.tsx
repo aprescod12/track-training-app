@@ -3,7 +3,7 @@ import { Stack, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import "react-native-reanimated";
-import { View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useAppColors } from "../lib/theme";
 import { initNotificationHandler } from "../lib/notifications";
 import * as Sentry from '@sentry/react-native';
@@ -126,8 +126,15 @@ export default Sentry.wrap(function RootLayout() {
         <Stack.Screen
           name="team-training/index"
           options={{
+            presentation: "modal",
             title: "Team Training",
             headerShown: true,
+            headerBackVisible: false,
+            headerRight: () => (
+              <Pressable onPress={() => router.back()} hitSlop={8}>
+                <Text style={{ color: c.text, fontWeight: "700" }}>Done</Text>
+              </Pressable>
+            ),
             headerStyle: { backgroundColor: c.bg },
             headerTintColor: c.text,
             contentStyle: { backgroundColor: c.bg },
