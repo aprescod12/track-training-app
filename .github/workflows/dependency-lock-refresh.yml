@@ -21,7 +21,7 @@ jobs:
           cache: npm
 
       - name: Refresh vulnerable transitive dependencies without breaking upgrades
-        run: npm audit fix --package-lock-only --omit=dev --ignore-scripts
+        run: npm audit fix --package-lock-only --omit=dev --ignore-scripts || true
 
       - name: Show remaining production audit
         run: npm audit --omit=dev || true
