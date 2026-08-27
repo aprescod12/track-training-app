@@ -1,9 +1,14 @@
-import { Stack } from "expo-router";
+import { useEffect } from "react";
+import { Stack, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as Notifications from "expo-notifications";
 import "react-native-reanimated";
 import { View } from "react-native";
 import { useAppColors } from "../lib/theme";
+import { initNotificationHandler } from "../lib/notifications";
 import * as Sentry from '@sentry/react-native';
+
+initNotificationHandler();
 
 Sentry.init({
   dsn: 'https://5ec0d339a9abe5154477af55b2e502b5@o4511943336329216.ingest.us.sentry.io/4511943336591360',
@@ -21,8 +26,31 @@ Sentry.init({
   // spotlight: __DEV__,
 });
 
+function useNotificationObserver() {
+  useEffect(() => {
+    function redirect(notification: Notifications.Notification) {
+      const url = notification.request.content.data?.url;
+      if (typeof url === "string" && url.startsWith("/")) {
+        router.push(url as any);
+      }
+    }
+
+    const lastResponse = Notifications.getLastNotificationResponse();
+    if (lastResponse?.notification) {
+      redirect(lastResponse.notification);
+    }
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => redirect(response.notification)
+    );
+
+    return () => subscription.remove();
+  }, []);
+}
+
 export default Sentry.wrap(function RootLayout() {
   const c = useAppColors();
+  useNotificationObserver();
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
@@ -88,6 +116,52 @@ export default Sentry.wrap(function RootLayout() {
           options={{
             presentation: "modal",
             title: "Add Event",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
+
+        <Stack.Screen
+          name="team-training/index"
+          options={{
+            title: "Team Training",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
+
+        <Stack.Screen
+          name="team-training/template-new"
+          options={{
+            presentation: "modal",
+            title: "Workout Template",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
+
+        <Stack.Screen
+          name="team-training/assign"
+          options={{
+            presentation: "modal",
+            title: "Assign Workout",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
+
+        <Stack.Screen
+          name="team-training/assignment/[recipientId]"
+          options={{
+            title: "Team Assignment",
             headerShown: true,
             headerStyle: { backgroundColor: c.bg },
             headerTintColor: c.text,
