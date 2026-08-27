@@ -910,6 +910,374 @@ export type Database = {
           },
         ]
       }
+      workout_assignment_entries: {
+        Row: {
+          assignment_id: string
+          created_at: string
+          distance_m: number | null
+          exercise_id: string | null
+          exercise_name_snapshot: string
+          id: string
+          intensity_text: string | null
+          label: string | null
+          notes: string | null
+          recovery_seconds: number | null
+          reps: number | null
+          sets: number | null
+          sort_order: number
+          target_time_text: string | null
+          target_weight: number | null
+        }
+        Insert: {
+          assignment_id: string
+          created_at?: string
+          distance_m?: number | null
+          exercise_id?: string | null
+          exercise_name_snapshot: string
+          id?: string
+          intensity_text?: string | null
+          label?: string | null
+          notes?: string | null
+          recovery_seconds?: number | null
+          reps?: number | null
+          sets?: number | null
+          sort_order: number
+          target_time_text?: string | null
+          target_weight?: number | null
+        }
+        Update: {
+          assignment_id?: string
+          created_at?: string
+          distance_m?: number | null
+          exercise_id?: string | null
+          exercise_name_snapshot?: string
+          id?: string
+          intensity_text?: string | null
+          label?: string | null
+          notes?: string | null
+          recovery_seconds?: number | null
+          reps?: number | null
+          sets?: number | null
+          sort_order?: number
+          target_time_text?: string | null
+          target_weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_assignment_entries_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "athlete_assignment_inbox_v"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_entries_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "coach_assignment_dashboard_v"
+            referencedColumns: ["assignment_id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_entries_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "workout_assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_entries_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["exercise_id"]
+          },
+        ]
+      }
+      workout_assignment_recipients: {
+        Row: {
+          assigned_at: string
+          assignment_id: string
+          athlete_membership_id: string
+          created_at: string
+          first_viewed_at: string | null
+          id: string
+          team_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          assignment_id: string
+          athlete_membership_id: string
+          created_at?: string
+          first_viewed_at?: string | null
+          id?: string
+          team_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assignment_id?: string
+          athlete_membership_id?: string
+          created_at?: string
+          first_viewed_at?: string | null
+          id?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_assignment_recipients_assignment_same_team_fkey"
+            columns: ["team_id", "assignment_id"]
+            isOneToOne: false
+            referencedRelation: "athlete_assignment_inbox_v"
+            referencedColumns: ["team_id", "assignment_id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_recipients_assignment_same_team_fkey"
+            columns: ["team_id", "assignment_id"]
+            isOneToOne: false
+            referencedRelation: "coach_assignment_dashboard_v"
+            referencedColumns: ["team_id", "assignment_id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_recipients_assignment_same_team_fkey"
+            columns: ["team_id", "assignment_id"]
+            isOneToOne: false
+            referencedRelation: "workout_assignments"
+            referencedColumns: ["team_id", "id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_recipients_athlete_same_team_fkey"
+            columns: ["team_id", "athlete_membership_id"]
+            isOneToOne: false
+            referencedRelation: "team_memberships"
+            referencedColumns: ["team_id", "id"]
+          },
+        ]
+      }
+      workout_assignment_submissions: {
+        Row: {
+          assignment_recipient_id: string
+          athlete_membership_id: string
+          athlete_note: string | null
+          coach_note: string | null
+          completion_status: string
+          id: string
+          reviewed_at: string | null
+          reviewed_by_membership_id: string | null
+          submitted_at: string
+          team_id: string
+          unavailable_reason: string | null
+          updated_at: string
+          workout_id: string | null
+        }
+        Insert: {
+          assignment_recipient_id: string
+          athlete_membership_id: string
+          athlete_note?: string | null
+          coach_note?: string | null
+          completion_status: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by_membership_id?: string | null
+          submitted_at?: string
+          team_id: string
+          unavailable_reason?: string | null
+          updated_at?: string
+          workout_id?: string | null
+        }
+        Update: {
+          assignment_recipient_id?: string
+          athlete_membership_id?: string
+          athlete_note?: string | null
+          coach_note?: string | null
+          completion_status?: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by_membership_id?: string | null
+          submitted_at?: string
+          team_id?: string
+          unavailable_reason?: string | null
+          updated_at?: string
+          workout_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_assignment_submissions_athlete_same_team_fkey"
+            columns: ["team_id", "athlete_membership_id"]
+            isOneToOne: false
+            referencedRelation: "team_memberships"
+            referencedColumns: ["team_id", "id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_submissions_recipient_same_team_fkey"
+            columns: ["team_id", "assignment_recipient_id"]
+            isOneToOne: false
+            referencedRelation: "workout_assignment_recipients"
+            referencedColumns: ["team_id", "id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_submissions_reviewer_same_team_fkey"
+            columns: ["team_id", "reviewed_by_membership_id"]
+            isOneToOne: false
+            referencedRelation: "team_memberships"
+            referencedColumns: ["team_id", "id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_submissions_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "team_workout_summary_v"
+            referencedColumns: ["workout_id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_submissions_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workout_summary_v"
+            referencedColumns: ["workout_id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_submissions_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workout_assignment_targets: {
+        Row: {
+          assignment_id: string
+          athlete_membership_id: string | null
+          created_at: string
+          group_id: string | null
+          id: string
+          target_type: string
+          team_id: string
+        }
+        Insert: {
+          assignment_id: string
+          athlete_membership_id?: string | null
+          created_at?: string
+          group_id?: string | null
+          id?: string
+          target_type: string
+          team_id: string
+        }
+        Update: {
+          assignment_id?: string
+          athlete_membership_id?: string | null
+          created_at?: string
+          group_id?: string | null
+          id?: string
+          target_type?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_assignment_targets_assignment_same_team_fkey"
+            columns: ["team_id", "assignment_id"]
+            isOneToOne: false
+            referencedRelation: "athlete_assignment_inbox_v"
+            referencedColumns: ["team_id", "assignment_id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_targets_assignment_same_team_fkey"
+            columns: ["team_id", "assignment_id"]
+            isOneToOne: false
+            referencedRelation: "coach_assignment_dashboard_v"
+            referencedColumns: ["team_id", "assignment_id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_targets_assignment_same_team_fkey"
+            columns: ["team_id", "assignment_id"]
+            isOneToOne: false
+            referencedRelation: "workout_assignments"
+            referencedColumns: ["team_id", "id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_targets_athlete_same_team_fkey"
+            columns: ["team_id", "athlete_membership_id"]
+            isOneToOne: false
+            referencedRelation: "team_memberships"
+            referencedColumns: ["team_id", "id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_targets_group_same_team_fkey"
+            columns: ["team_id", "group_id"]
+            isOneToOne: false
+            referencedRelation: "team_groups"
+            referencedColumns: ["team_id", "id"]
+          },
+        ]
+      }
+      workout_assignments: {
+        Row: {
+          assigned_at: string
+          assigned_by_membership_id: string
+          cancelled_at: string | null
+          closed_at: string | null
+          created_at: string
+          due_at: string | null
+          id: string
+          instructions: string | null
+          scheduled_date: string
+          status: string
+          team_id: string
+          template_id: string
+          title_snapshot: string
+          updated_at: string
+          workout_type_snapshot: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by_membership_id: string
+          cancelled_at?: string | null
+          closed_at?: string | null
+          created_at?: string
+          due_at?: string | null
+          id?: string
+          instructions?: string | null
+          scheduled_date: string
+          status?: string
+          team_id: string
+          template_id: string
+          title_snapshot: string
+          updated_at?: string
+          workout_type_snapshot: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by_membership_id?: string
+          cancelled_at?: string | null
+          closed_at?: string | null
+          created_at?: string
+          due_at?: string | null
+          id?: string
+          instructions?: string | null
+          scheduled_date?: string
+          status?: string
+          team_id?: string
+          template_id?: string
+          title_snapshot?: string
+          updated_at?: string
+          workout_type_snapshot?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_assignments_assigner_same_team_fkey"
+            columns: ["team_id", "assigned_by_membership_id"]
+            isOneToOne: false
+            referencedRelation: "team_memberships"
+            referencedColumns: ["team_id", "id"]
+          },
+          {
+            foreignKeyName: "workout_assignments_template_same_team_fkey"
+            columns: ["team_id", "template_id"]
+            isOneToOne: false
+            referencedRelation: "workout_templates"
+            referencedColumns: ["team_id", "id"]
+          },
+        ]
+      }
       workout_entries: {
         Row: {
           created_at: string
@@ -1009,6 +1377,132 @@ export type Database = {
           },
         ]
       }
+      workout_template_entries: {
+        Row: {
+          created_at: string
+          distance_m: number | null
+          exercise_id: string | null
+          exercise_name_snapshot: string
+          id: string
+          intensity_text: string | null
+          label: string | null
+          notes: string | null
+          recovery_seconds: number | null
+          reps: number | null
+          sets: number | null
+          sort_order: number
+          target_time_text: string | null
+          target_weight: number | null
+          template_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          distance_m?: number | null
+          exercise_id?: string | null
+          exercise_name_snapshot: string
+          id?: string
+          intensity_text?: string | null
+          label?: string | null
+          notes?: string | null
+          recovery_seconds?: number | null
+          reps?: number | null
+          sets?: number | null
+          sort_order: number
+          target_time_text?: string | null
+          target_weight?: number | null
+          template_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          distance_m?: number | null
+          exercise_id?: string | null
+          exercise_name_snapshot?: string
+          id?: string
+          intensity_text?: string | null
+          label?: string | null
+          notes?: string | null
+          recovery_seconds?: number | null
+          reps?: number | null
+          sets?: number | null
+          sort_order?: number
+          target_time_text?: string | null
+          target_weight?: number | null
+          template_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_template_entries_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["exercise_id"]
+          },
+          {
+            foreignKeyName: "workout_template_entries_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "workout_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workout_templates: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          created_by_membership_id: string
+          description: string | null
+          id: string
+          is_active: boolean
+          team_id: string
+          title: string
+          updated_at: string
+          workout_type: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          created_by_membership_id: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          team_id: string
+          title: string
+          updated_at?: string
+          workout_type: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          created_by_membership_id?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          team_id?: string
+          title?: string
+          updated_at?: string
+          workout_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_templates_creator_same_team_fkey"
+            columns: ["team_id", "created_by_membership_id"]
+            isOneToOne: false
+            referencedRelation: "team_memberships"
+            referencedColumns: ["team_id", "id"]
+          },
+          {
+            foreignKeyName: "workout_templates_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workouts: {
         Row: {
           created_at: string
@@ -1059,6 +1553,108 @@ export type Database = {
       }
     }
     Views: {
+      athlete_assignment_inbox_v: {
+        Row: {
+          assigned_at: string | null
+          assignment_id: string | null
+          assignment_recipient_id: string | null
+          assignment_status: string | null
+          assignment_updated_at: string | null
+          athlete_membership_id: string | null
+          athlete_note: string | null
+          coach_note: string | null
+          completion_status: string | null
+          due_at: string | null
+          instructions: string | null
+          reviewed_at: string | null
+          scheduled_date: string | null
+          submission_id: string | null
+          submission_updated_at: string | null
+          submitted_at: string | null
+          team_id: string | null
+          team_name: string | null
+          title_snapshot: string | null
+          unavailable_reason: string | null
+          workout_id: string | null
+          workout_type_snapshot: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_assignment_submissions_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "team_workout_summary_v"
+            referencedColumns: ["workout_id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_submissions_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workout_summary_v"
+            referencedColumns: ["workout_id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_submissions_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_assignment_dashboard_v: {
+        Row: {
+          assigned_at: string | null
+          assignment_id: string | null
+          assignment_recipient_id: string | null
+          assignment_status: string | null
+          assignment_updated_at: string | null
+          athlete_full_name: string | null
+          athlete_membership_id: string | null
+          athlete_note: string | null
+          athlete_user_id: string | null
+          athlete_username: string | null
+          coach_note: string | null
+          completion_status: string | null
+          due_at: string | null
+          instructions: string | null
+          reviewed_at: string | null
+          reviewed_by_membership_id: string | null
+          scheduled_date: string | null
+          submission_id: string | null
+          submission_updated_at: string | null
+          submitted_at: string | null
+          team_id: string | null
+          team_name: string | null
+          title_snapshot: string | null
+          unavailable_reason: string | null
+          workout_id: string | null
+          workout_type_snapshot: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_assignment_submissions_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "team_workout_summary_v"
+            referencedColumns: ["workout_id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_submissions_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workout_summary_v"
+            referencedColumns: ["workout_id"]
+          },
+          {
+            foreignKeyName: "workout_assignment_submissions_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_workout_summary_v: {
         Row: {
           distance_m_total: number | null
@@ -1120,6 +1716,23 @@ export type Database = {
         }
         Returns: string
       }
+      attach_workout_to_assignment: {
+        Args: {
+          p_assignment_recipient_id: string
+          p_athlete_note?: string
+          p_completion_status: string
+          p_workout_id: string
+        }
+        Returns: string
+      }
+      cancel_workout_assignment: {
+        Args: { p_assignment_id: string }
+        Returns: string
+      }
+      close_workout_assignment: {
+        Args: { p_assignment_id: string }
+        Returns: string
+      }
       create_organization: {
         Args: {
           p_city?: string
@@ -1143,6 +1756,19 @@ export type Database = {
           p_slug: string
           p_state_region?: string
           p_visibility?: string
+        }
+        Returns: string
+      }
+      create_workout_assignment: {
+        Args: {
+          p_athlete_membership_ids?: string[]
+          p_due_at?: string
+          p_group_ids?: string[]
+          p_instructions?: string
+          p_scheduled_date: string
+          p_target_team?: boolean
+          p_team_id: string
+          p_template_id: string
         }
         Returns: string
       }
@@ -1187,12 +1813,26 @@ export type Database = {
         }
         Returns: string
       }
+      review_workout_assignment_submission: {
+        Args: { p_coach_note?: string; p_submission_id: string }
+        Returns: string
+      }
       submit_entity_claim: {
         Args: {
           p_organization_id?: string
           p_requested_role: string
           p_team_id?: string
           p_verification_request_id?: string
+        }
+        Returns: string
+      }
+      submit_workout_assignment: {
+        Args: {
+          p_assignment_recipient_id: string
+          p_athlete_note?: string
+          p_completion_status: string
+          p_unavailable_reason?: string
+          p_workout_id?: string
         }
         Returns: string
       }
