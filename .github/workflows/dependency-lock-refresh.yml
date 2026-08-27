@@ -1,0 +1,34 @@
+name: Dependency Lock Refresh
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  refresh-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.1"
+          cache: npm
+
+      - name: Refresh vulnerable transitive dependencies without breaking upgrades
+        run: npm audit fix --package-lock-only --omit=dev --ignore-scripts
+
+      - name: Show remaining production audit
+        run: npm audit --omit=dev || true
+
+      - name: Upload refreshed lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: refreshed-package-lock
+          path: package-lock.json
+          retention-days: 1
