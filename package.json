@@ -14,7 +14,7 @@
     "test:coverage": "jest --runInBand --coverage",
     "test:watch": "jest --watch",
     "validate:expo": "expo config --type public > /dev/null",
-    "export:ci": "expo export --platform all --output-dir dist/ci"
+    "export:ci": "expo export --platform ios --output-dir dist/ci-ios && expo export --platform android --output-dir dist/ci-android"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
