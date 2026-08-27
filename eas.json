@@ -10,7 +10,7 @@
       "environment": "development",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "development"
+        "EXPO_PUBLIC_APP_ENV": "local"
       }
     },
     "preview": {
