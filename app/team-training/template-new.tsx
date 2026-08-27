@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import FormScreen from "../../components/FormScreen";
 import PrimaryButton from "../../components/PrimaryButton";
 import { useAppColors } from "../../lib/theme";
+import { AppError, toAppError } from "../../lib/errors";
 import {
   createWorkoutTemplate,
   getActiveCoachTeams,
@@ -38,14 +39,24 @@ function blankEntry(): EntryForm {
 function optionalPositiveInt(value: string) {
   if (!value.trim()) return null;
   const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error("Sets and reps must be positive integers.");
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new AppError({
+      kind: "validation",
+      message: "Sets and reps must be positive integers.",
+    });
+  }
   return parsed;
 }
 
 function optionalNonNegative(value: string, label: string) {
   if (!value.trim()) return null;
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${label} must be zero or greater.`);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new AppError({
+      kind: "validation",
+      message: `${label} must be zero or greater.`,
+    });
+  }
   return parsed;
 }
 
@@ -65,8 +76,12 @@ export default function NewWorkoutTemplateScreen() {
       const rows = await getActiveCoachTeams();
       setTeams(rows);
       setTeamId((current) => current || rows[0]?.team_id || "");
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
+    } catch (error: unknown) {
+      setError(
+        toAppError(error, {
+          fallbackMessage: "Could not load your coach teams. Please try again.",
+        }).message
+      );
     }
   }, []);
 
@@ -82,6 +97,10 @@ export default function NewWorkoutTemplateScreen() {
     const team = teams.find((item) => item.team_id === teamId);
     if (!team) {
       setError("Select an active team where you are a coach.");
+      return;
+    }
+    if (!title.trim()) {
+      setError("Template title is required.");
       return;
     }
 
@@ -102,6 +121,13 @@ export default function NewWorkoutTemplateScreen() {
           notes: entry.notes.trim() || null,
         }));
 
+      if (!payload.length) {
+        throw new AppError({
+          kind: "validation",
+          message: "Add at least one prescription entry.",
+        });
+      }
+
       await createWorkoutTemplate({
         team,
         title,
@@ -111,8 +137,12 @@ export default function NewWorkoutTemplateScreen() {
       });
 
       router.replace("/team-training");
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
+    } catch (error: unknown) {
+      setError(
+        toAppError(error, {
+          fallbackMessage: "Could not save the workout template. Check the form and try again.",
+        }).message
+      );
     } finally {
       setSaving(false);
     }
