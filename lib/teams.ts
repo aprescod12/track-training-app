@@ -6,6 +6,7 @@ const db = supabase as any;
 export type TeamMemberType = "athlete" | "coach" | "staff";
 export type TeamManagementRole = "member" | "admin" | "owner";
 export type TeamVisibility = "public" | "unlisted" | "private";
+export type TrainingWorkoutType = "track" | "lift";
 
 export type MyTeam = {
   membership_id: string;
@@ -25,6 +26,7 @@ export type TeamMember = {
   user_id: string;
   member_type: TeamMemberType;
   management_role: TeamManagementRole;
+  role_title: string | null;
   status: "pending" | "active" | "inactive" | "removed";
   joined_at: string | null;
   full_name: string | null;
@@ -54,6 +56,30 @@ export type CoachingAssignment = {
   active: boolean;
 };
 
+export type TeamGroup = {
+  id: string;
+  team_id: string;
+  name: string;
+  group_type: string | null;
+  parent_group_id: string | null;
+  sort_order: number | null;
+  is_active: boolean;
+};
+
+export type TeamGroupMembership = {
+  team_id: string;
+  group_id: string;
+  team_membership_id: string;
+};
+
+export type CoachTrainingPermission = {
+  team_id: string;
+  coach_membership_id: string;
+  workout_type: TrainingWorkoutType;
+  can_prescribe: boolean;
+  can_review: boolean;
+};
+
 export type TeamWorkspace = {
   team: {
     id: string;
@@ -67,6 +93,9 @@ export type TeamWorkspace = {
   members: TeamMember[];
   invitations: TeamInvitation[];
   coachingAssignments: CoachingAssignment[];
+  groups: TeamGroup[];
+  groupMemberships: TeamGroupMembership[];
+  coachTrainingPermissions: CoachTrainingPermission[];
 };
 
 async function requireUser() {
@@ -96,6 +125,16 @@ export function slugifyTeamName(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
+}
+
+export function coachHasTrainingPermission(
+  permissions: CoachTrainingPermission[],
+  workoutType: TrainingWorkoutType,
+  capability: "prescribe" | "review"
+) {
+  const row = permissions.find((permission) => permission.workout_type === workoutType);
+  if (!row) return false;
+  return capability === "prescribe" ? row.can_prescribe : row.can_review;
 }
 
 export async function getMyTeams(): Promise<MyTeam[]> {
@@ -243,7 +282,7 @@ export async function inviteTeamMember(input: {
 export async function getTeamWorkspace(teamId: string): Promise<TeamWorkspace> {
   const user = await requireUser();
 
-  const [teamRes, membershipRes, membersRes] = await Promise.all([
+  const [teamRes, membershipRes, membersRes, groupsRes, groupMembershipsRes] = await Promise.all([
     db
       .from("teams")
       .select("id, name, slug, description, visibility, organization_id")
@@ -251,22 +290,35 @@ export async function getTeamWorkspace(teamId: string): Promise<TeamWorkspace> {
       .single(),
     db
       .from("team_memberships")
-      .select("id, team_id, user_id, member_type, management_role, status, joined_at")
+      .select("id, team_id, user_id, member_type, management_role, role_title, status, joined_at")
       .eq("team_id", teamId)
       .eq("user_id", user.id)
       .eq("status", "active")
       .single(),
     db
       .from("team_memberships")
-      .select("id, team_id, user_id, member_type, management_role, status, joined_at")
+      .select("id, team_id, user_id, member_type, management_role, role_title, status, joined_at")
       .eq("team_id", teamId)
       .eq("status", "active")
       .order("created_at", { ascending: true }),
+    db
+      .from("team_groups")
+      .select("id, team_id, name, group_type, parent_group_id, sort_order, is_active")
+      .eq("team_id", teamId)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true }),
+    db
+      .from("team_group_memberships")
+      .select("team_id, group_id, team_membership_id")
+      .eq("team_id", teamId),
   ]);
 
   if (teamRes.error) throw teamRes.error;
   if (membershipRes.error) throw membershipRes.error;
   if (membersRes.error) throw membersRes.error;
+  if (groupsRes.error) throw groupsRes.error;
+  if (groupMembershipsRes.error) throw groupMembershipsRes.error;
 
   const rows = membersRes.data ?? [];
   const userIds = Array.from(new Set(rows.map((row: any) => row.user_id).filter(Boolean)));
@@ -289,6 +341,7 @@ export async function getTeamWorkspace(teamId: string): Promise<TeamWorkspace> {
       user_id: row.user_id,
       member_type: row.member_type,
       management_role: row.management_role,
+      role_title: row.role_title ?? null,
       status: row.status,
       joined_at: row.joined_at ?? null,
       full_name: profile?.full_name ?? null,
@@ -307,7 +360,7 @@ export async function getTeamWorkspace(teamId: string): Promise<TeamWorkspace> {
   }
 
   const isAdmin = ["owner", "admin"].includes(myMembership.management_role);
-  const [invitationsRes, coachingRes] = await Promise.all([
+  const [invitationsRes, coachingRes, permissionsRes] = await Promise.all([
     isAdmin
       ? db
           .from("team_invitations")
@@ -325,10 +378,15 @@ export async function getTeamWorkspace(teamId: string): Promise<TeamWorkspace> {
       )
       .eq("team_id", teamId)
       .eq("active", true),
+    db
+      .from("coach_training_permissions")
+      .select("team_id, coach_membership_id, workout_type, can_prescribe, can_review")
+      .eq("team_id", teamId),
   ]);
 
   if (invitationsRes.error) throw invitationsRes.error;
   if (coachingRes.error) throw coachingRes.error;
+  if (permissionsRes.error) throw permissionsRes.error;
 
   return {
     team: {
@@ -354,7 +412,141 @@ export async function getTeamWorkspace(teamId: string): Promise<TeamWorkspace> {
       created_at: row.created_at,
     })),
     coachingAssignments: (coachingRes.data ?? []) as CoachingAssignment[],
+    groups: (groupsRes.data ?? []) as TeamGroup[],
+    groupMemberships: (groupMembershipsRes.data ?? []) as TeamGroupMembership[],
+    coachTrainingPermissions: (permissionsRes.data ?? []).map((row: any) => ({
+      team_id: row.team_id,
+      coach_membership_id: row.coach_membership_id,
+      workout_type: row.workout_type === "lift" ? "lift" : "track",
+      can_prescribe: !!row.can_prescribe,
+      can_review: !!row.can_review,
+    })) as CoachTrainingPermission[],
   };
+}
+
+export async function createTeamGroup(input: {
+  teamId: string;
+  name: string;
+  groupType?: string | null;
+}) {
+  const user = await requireUser();
+  const name = input.name.trim();
+  if (!name) {
+    throw new AppError({ kind: "validation", message: "Group name is required." });
+  }
+
+  const { data, error } = await db
+    .from("team_groups")
+    .insert({
+      team_id: input.teamId,
+      name,
+      group_type: input.groupType?.trim() || "training",
+      parent_group_id: null,
+      sort_order: null,
+      is_active: true,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return data.id as string;
+}
+
+export async function setTeamGroupMembership(input: {
+  teamId: string;
+  groupId: string;
+  teamMembershipId: string;
+  enabled: boolean;
+}) {
+  await requireUser();
+
+  if (input.enabled) {
+    const { error } = await db.from("team_group_memberships").upsert(
+      {
+        team_id: input.teamId,
+        group_id: input.groupId,
+        team_membership_id: input.teamMembershipId,
+      },
+      { onConflict: "group_id,team_membership_id" }
+    );
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await db
+    .from("team_group_memberships")
+    .delete()
+    .eq("team_id", input.teamId)
+    .eq("group_id", input.groupId)
+    .eq("team_membership_id", input.teamMembershipId);
+  if (error) throw error;
+}
+
+export async function setCoachTrainingScope(input: {
+  teamId: string;
+  coachMembershipId: string;
+  workoutType: TrainingWorkoutType;
+  enabled: boolean;
+}) {
+  const user = await requireUser();
+  const { error } = await db.from("coach_training_permissions").upsert(
+    {
+      team_id: input.teamId,
+      coach_membership_id: input.coachMembershipId,
+      workout_type: input.workoutType,
+      can_prescribe: input.enabled,
+      can_review: input.enabled,
+      granted_by: user.id,
+    },
+    { onConflict: "team_id,coach_membership_id,workout_type" }
+  );
+  if (error) throw error;
+}
+
+export async function updateTeamMemberRoleTitle(input: {
+  membershipId: string;
+  roleTitle: string | null;
+}) {
+  await requireUser();
+  const roleTitle = input.roleTitle?.trim() || null;
+  const { error } = await db
+    .from("team_memberships")
+    .update({ role_title: roleTitle })
+    .eq("id", input.membershipId);
+  if (error) throw error;
+}
+
+export async function getMyCoachTrainingPermissions(
+  teamId: string
+): Promise<CoachTrainingPermission[]> {
+  const user = await requireUser();
+  const { data: membership, error: membershipError } = await db
+    .from("team_memberships")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("user_id", user.id)
+    .eq("member_type", "coach")
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (membershipError) throw membershipError;
+  if (!membership?.id) return [];
+
+  const { data, error } = await db
+    .from("coach_training_permissions")
+    .select("team_id, coach_membership_id, workout_type, can_prescribe, can_review")
+    .eq("team_id", teamId)
+    .eq("coach_membership_id", membership.id);
+  if (error) throw error;
+
+  return (data ?? []).map((row: any) => ({
+    team_id: row.team_id,
+    coach_membership_id: row.coach_membership_id,
+    workout_type: row.workout_type === "lift" ? "lift" : "track",
+    can_prescribe: !!row.can_prescribe,
+    can_review: !!row.can_review,
+  })) as CoachTrainingPermission[];
 }
 
 export async function assignCoachToAthlete(input: {
