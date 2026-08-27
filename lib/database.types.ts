@@ -179,6 +179,67 @@ export type Database = {
           },
         ]
       }
+      entity_claims: {
+        Row: {
+          claimant_user_id: string
+          created_at: string
+          id: string
+          organization_id: string | null
+          requested_role: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          team_id: string | null
+          verification_request_id: string | null
+        }
+        Insert: {
+          claimant_user_id: string
+          created_at?: string
+          id?: string
+          organization_id?: string | null
+          requested_role: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          team_id?: string | null
+          verification_request_id?: string | null
+        }
+        Update: {
+          claimant_user_id?: string
+          created_at?: string
+          id?: string
+          organization_id?: string | null
+          requested_role?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          team_id?: string | null
+          verification_request_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entity_claims_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_claims_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_claims_verification_request_id_fkey"
+            columns: ["verification_request_id"]
+            isOneToOne: false
+            referencedRelation: "verification_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entry_sets: {
         Row: {
           created_at: string
@@ -321,6 +382,54 @@ export type Database = {
           user_low?: string
         }
         Relationships: []
+      }
+      organization_affiliation_requests: {
+        Row: {
+          approved_by: string | null
+          created_at: string
+          id: string
+          organization_id: string
+          requested_by: string
+          resolved_at: string | null
+          status: string
+          team_id: string
+        }
+        Insert: {
+          approved_by?: string | null
+          created_at?: string
+          id?: string
+          organization_id: string
+          requested_by: string
+          resolved_at?: string | null
+          status?: string
+          team_id: string
+        }
+        Update: {
+          approved_by?: string | null
+          created_at?: string
+          id?: string
+          organization_id?: string
+          requested_by?: string
+          resolved_at?: string | null
+          status?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_affiliation_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_affiliation_requests_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       organization_memberships: {
         Row: {
@@ -741,6 +850,66 @@ export type Database = {
           },
         ]
       }
+      verification_requests: {
+        Row: {
+          evidence_file_path: string | null
+          evidence_metadata: Json | null
+          id: string
+          organization_id: string | null
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string
+          submitted_by: string
+          team_id: string | null
+          verification_method: string
+        }
+        Insert: {
+          evidence_file_path?: string | null
+          evidence_metadata?: Json | null
+          id?: string
+          organization_id?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          submitted_by: string
+          team_id?: string | null
+          verification_method: string
+        }
+        Update: {
+          evidence_file_path?: string | null
+          evidence_metadata?: Json | null
+          id?: string
+          organization_id?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          submitted_by?: string
+          team_id?: string | null
+          verification_method?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verification_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "verification_requests_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workout_entries: {
         Row: {
           created_at: string
@@ -986,6 +1155,46 @@ export type Database = {
       recompute_exercise_pr: {
         Args: { p_exercise_id: string; p_user_id: string }
         Returns: undefined
+      }
+      request_organization_affiliation: {
+        Args: { p_organization_id: string; p_team_id: string }
+        Returns: string
+      }
+      request_verification: {
+        Args: {
+          p_evidence_file_path?: string
+          p_evidence_metadata?: Json
+          p_organization_id?: string
+          p_team_id?: string
+          p_verification_method: string
+        }
+        Returns: string
+      }
+      resolve_entity_claim: {
+        Args: { p_approve: boolean; p_claim_id: string; p_resolved_by: string }
+        Returns: string
+      }
+      resolve_organization_affiliation: {
+        Args: { p_approve: boolean; p_request_id: string }
+        Returns: string
+      }
+      resolve_verification_request: {
+        Args: {
+          p_approve: boolean
+          p_request_id: string
+          p_review_notes?: string
+          p_reviewed_by: string
+        }
+        Returns: string
+      }
+      submit_entity_claim: {
+        Args: {
+          p_organization_id?: string
+          p_requested_role: string
+          p_team_id?: string
+          p_verification_request_id?: string
+        }
+        Returns: string
       }
     }
     Enums: {
