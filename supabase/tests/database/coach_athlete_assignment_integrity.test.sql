@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(19);
+select plan(20);
 
 insert into auth.users (id, email) values
   ('81000000-0000-4000-8000-000000000001', 'owner-integrity@example.com'),
