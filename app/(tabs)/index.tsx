@@ -201,7 +201,7 @@ export default function HomeScreen() {
       setWeeklyStats({ totalDistanceM: 0, trackWorkouts: 0, liftWorkouts: 0, liftSets: 0 });
       setFeaturedExercise(null);
       setFeaturedRows([]);
-      setError("Not logged in");
+      setError("Please sign in again to continue.");
       return;
     }
 
@@ -234,7 +234,8 @@ export default function HomeScreen() {
       .maybeSingle();
 
     if (todayRes.error) {
-      setError("Error: " + todayRes.error.message);
+      console.log("today workout error:", todayRes.error);
+      setError("Unable to load today's workout. Pull to refresh and try again.");
       setTodaysWorkout(null);
       setWeekWorkouts([]);
       return;
@@ -258,7 +259,8 @@ export default function HomeScreen() {
       .order("created_at", { ascending: true });
 
     if (weekRes.error) {
-      setError("Error: " + weekRes.error.message);
+      console.log("week workouts error:", weekRes.error);
+      setError("Unable to load this week's workouts. Pull to refresh and try again.");
       setWeekWorkouts([]);
       return;
     }
@@ -294,7 +296,8 @@ export default function HomeScreen() {
       .lte("workouts.workout_date", endKey);
 
     if (distErr) {
-      setError("Error: " + distErr.message);
+      console.log("weekly totals error:", distErr);
+      setError("Unable to load weekly training totals. Pull to refresh and try again.");
       return;
     }
 
@@ -321,7 +324,8 @@ export default function HomeScreen() {
 
     if (exErr) {
       setAllExercises([]);
-      setError("Error: " + exErr.message);
+      console.log("exercise options error:", exErr);
+      setError("Unable to load exercise options. Pull to refresh and try again.");
       return;
     }
 
