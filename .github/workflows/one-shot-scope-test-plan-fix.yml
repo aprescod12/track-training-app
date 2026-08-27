@@ -1,0 +1,29 @@
+name: One-shot scope test plan fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-shot-scope-test-plan-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fix pgTAP plan count
+        run: sed -i 's/select plan(30);/select plan(32);/' supabase/tests/database/coach_training_responsibility_scopes.test.sql
+      - name: Commit fix and remove one-shot workflow
+        run: |
+          grep -q 'select plan(32);' supabase/tests/database/coach_training_responsibility_scopes.test.sql
+          git config user.name "Amiri Prescod"
+          git config user.email "presso1717@gmail.com"
+          git rm .github/workflows/one-shot-scope-test-plan-fix.yml
+          git add supabase/tests/database/coach_training_responsibility_scopes.test.sql
+          git commit -m "test(auth): correct scope test plan"
+          git push origin HEAD:main
