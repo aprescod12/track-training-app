@@ -6,10 +6,12 @@ import PrimaryButton from "../../components/PrimaryButton";
 import { useAppColors } from "../../lib/theme";
 import { formatYMD } from "../../lib/date";
 import {
+  getActiveCoachTeams,
   getAthleteAssignments,
   getCoachAssignments,
   type AthleteAssignment,
   type CoachAssignment,
+  type CoachTeam,
 } from "../../lib/training";
 import {
   syncAthleteTrainingNotifications,
@@ -43,6 +45,7 @@ export default function TeamTrainingScreen() {
   const c = useAppColors();
   const [athleteRows, setAthleteRows] = useState<AthleteAssignment[]>([]);
   const [coachRows, setCoachRows] = useState<CoachAssignment[]>([]);
+  const [coachTeams, setCoachTeams] = useState<CoachTeam[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -51,12 +54,14 @@ export default function TeamTrainingScreen() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [athlete, coach] = await Promise.all([
+      const [athlete, coach, teams] = await Promise.all([
         getAthleteAssignments(),
         getCoachAssignments(),
+        getActiveCoachTeams(),
       ]);
       setAthleteRows(athlete);
       setCoachRows(coach);
+      setCoachTeams(teams);
 
       void syncAthleteTrainingNotifications(athlete);
       void syncCoachTrainingNotifications(coach);
@@ -64,6 +69,7 @@ export default function TeamTrainingScreen() {
       setError(e?.message ?? String(e));
       setAthleteRows([]);
       setCoachRows([]);
+      setCoachTeams([]);
     }
   }, []);
 
@@ -100,7 +106,7 @@ export default function TeamTrainingScreen() {
         <Text style={{ color: "#ef4444", fontWeight: "600" }}>{error}</Text>
       )}
 
-      {coachRows.length > 0 && (
+      {coachTeams.length > 0 && (
         <View
           style={{
             borderWidth: 1,
@@ -113,6 +119,9 @@ export default function TeamTrainingScreen() {
         >
           <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>
             Coach tools
+          </Text>
+          <Text style={{ color: c.subtext }}>
+            Active coach teams: {coachTeams.map((team) => team.team_name).join(", ")}
           </Text>
           <View style={{ flexDirection: "row", gap: 8 }}>
             <View style={{ flex: 1, borderWidth: 1, borderColor: c.border, borderRadius: 12, padding: 10 }}>
@@ -185,7 +194,7 @@ export default function TeamTrainingScreen() {
         )}
       </View>
 
-      {coachRows.length > 0 && (
+      {coachTeams.length > 0 && (
         <View
           style={{
             borderWidth: 1,
@@ -199,39 +208,43 @@ export default function TeamTrainingScreen() {
           <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>
             Coach dashboard
           </Text>
-          {coachRows.map((row) => (
-            <Pressable
-              key={row.assignment_recipient_id}
-              onPress={() =>
-                router.push(`/team-training/assignment/${row.assignment_recipient_id}`)
-              }
-              style={{
-                borderWidth: 1,
-                borderColor: c.border,
-                backgroundColor: c.bg,
-                borderRadius: 12,
-                padding: 12,
-                gap: 4,
-              }}
-            >
-              <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
-                <Text style={{ color: c.text, fontWeight: "800", flex: 1 }}>
-                  {athleteLabel(row)}
+          {coachRows.length === 0 ? (
+            <Text style={{ color: c.subtext }}>No athlete assignment rows yet.</Text>
+          ) : (
+            coachRows.map((row) => (
+              <Pressable
+                key={row.assignment_recipient_id}
+                onPress={() =>
+                  router.push(`/team-training/assignment/${row.assignment_recipient_id}`)
+                }
+                style={{
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  backgroundColor: c.bg,
+                  borderRadius: 12,
+                  padding: 12,
+                  gap: 4,
+                }}
+              >
+                <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+                  <Text style={{ color: c.text, fontWeight: "800", flex: 1 }}>
+                    {athleteLabel(row)}
+                  </Text>
+                  <Text style={{ color: c.subtext }}>{row.scheduled_date}</Text>
+                </View>
+                <Text style={{ color: c.text }}>{row.title_snapshot}</Text>
+                <Text style={{ color: c.subtext }}>
+                  {outcomeLabel(row)}
+                  {row.submission_id && !row.reviewed_at ? " · Review needed" : ""}
                 </Text>
-                <Text style={{ color: c.subtext }}>{row.scheduled_date}</Text>
-              </View>
-              <Text style={{ color: c.text }}>{row.title_snapshot}</Text>
-              <Text style={{ color: c.subtext }}>
-                {outcomeLabel(row)}
-                {row.submission_id && !row.reviewed_at ? " · Review needed" : ""}
-              </Text>
-              <Text style={{ color: c.text, fontWeight: "700" }}>Open →</Text>
-            </Pressable>
-          ))}
+                <Text style={{ color: c.text, fontWeight: "700" }}>Open →</Text>
+              </Pressable>
+            ))
+          )}
         </View>
       )}
 
-      {athleteRows.length === 0 && coachRows.length === 0 && !error && (
+      {athleteRows.length === 0 && coachTeams.length === 0 && !error && (
         <View
           style={{
             borderWidth: 1,
