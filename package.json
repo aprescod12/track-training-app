@@ -9,8 +9,12 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
-    "test:watch": "jest --watch"
+    "test:coverage": "jest --runInBand --coverage",
+    "test:watch": "jest --watch",
+    "validate:expo": "expo config --type public > /dev/null",
+    "export:ci": "expo export --platform all --output-dir dist/ci"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
