@@ -51,6 +51,10 @@ jobs:
         run: npm run validate:expo
 
       - name: Production bundle export
+        env:
+          EXPO_PUBLIC_APP_ENV: local
+          EXPO_PUBLIC_SUPABASE_URL: https://ci-placeholder.invalid
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ci-public-key-placeholder
         run: npm run export:ci
 
   supabase-checks:
