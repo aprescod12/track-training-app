@@ -5,6 +5,7 @@ import FormScreen from "../../components/FormScreen";
 import PrimaryButton from "../../components/PrimaryButton";
 import { useAppColors } from "../../lib/theme";
 import { formatYMD } from "../../lib/date";
+import { toAppError } from "../../lib/errors";
 import {
   getActiveCoachTeams,
   getAthleteAssignments,
@@ -65,8 +66,12 @@ export default function TeamTrainingScreen() {
 
       void syncAthleteTrainingNotifications(athlete);
       void syncCoachTrainingNotifications(coach);
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
+    } catch (error: unknown) {
+      setError(
+        toAppError(error, {
+          fallbackMessage: "Could not load team training. Pull to refresh and try again.",
+        }).message
+      );
       setAthleteRows([]);
       setCoachRows([]);
       setCoachTeams([]);
