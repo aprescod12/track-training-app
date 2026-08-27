@@ -81,7 +81,7 @@ export default function TrainingHubScreen() {
         >
           <Text style={{ fontSize: 24, fontWeight: "900", color: c.text }}>Training Hub</Text>
           <Text style={{ color: c.subtext, lineHeight: 20 }}>
-            Your central space for logging workouts, checking stats, and managing your training flow.
+            Your central space for personal workouts, team assignments, stats, and your training schedule.
           </Text>
         </View>
 
@@ -95,11 +95,20 @@ export default function TrainingHubScreen() {
             />
             <HubTile
               title="Calendar"
-              subtitle="See workouts and events across your schedule."
+              subtitle="See workouts, assigned sessions, and personal events."
               onPress={() => router.push("/(tabs)/calendar")}
               large
             />
           </View>
+        </Section>
+
+        <Section title="Team Training">
+          <HubTile
+            title="Assignments & Coach Tools"
+            subtitle="Open assigned workouts, submit training outcomes, or manage coach assignments and reviews."
+            onPress={() => router.push("/team-training")}
+            large
+          />
         </Section>
 
         <Section title="Performance">
@@ -152,6 +161,23 @@ export default function TrainingHubScreen() {
             </Pressable>
 
             <Pressable
+              onPress={() => router.push("/team-training")}
+              style={{
+                borderWidth: 1,
+                borderColor: c.border,
+                backgroundColor: c.card,
+                borderRadius: 14,
+                padding: 14,
+                gap: 6,
+              }}
+            >
+              <Text style={{ color: c.text, fontWeight: "900" }}>2. Check team training</Text>
+              <Text style={{ color: c.subtext }}>
+                Review assigned sessions and submit outcomes when your team is using the coach workflow.
+              </Text>
+            </Pressable>
+
+            <Pressable
               onPress={() => router.push("/profile/overview")}
               style={{
                 borderWidth: 1,
@@ -162,7 +188,7 @@ export default function TrainingHubScreen() {
                 gap: 6,
               }}
             >
-              <Text style={{ color: c.text, fontWeight: "900" }}>2. Review your overview</Text>
+              <Text style={{ color: c.text, fontWeight: "900" }}>3. Review your overview</Text>
               <Text style={{ color: c.subtext }}>
                 Check weekly and monthly progress, recent activity, and your training split.
               </Text>
@@ -179,7 +205,7 @@ export default function TrainingHubScreen() {
                 gap: 6,
               }}
             >
-              <Text style={{ color: c.text, fontWeight: "900" }}>3. Dive into performance</Text>
+              <Text style={{ color: c.text, fontWeight: "900" }}>4. Dive into performance</Text>
               <Text style={{ color: c.subtext }}>
                 Open Track Stats or Lift Stats to look deeper at your numbers.
               </Text>
