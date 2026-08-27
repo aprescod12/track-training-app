@@ -1,0 +1,103 @@
+name: One-shot coach scope fixture repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-shot-coach-scope-fixture-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Grant explicit track scope in legacy fixtures
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          fixtures = [
+              (
+                  "supabase/tests/database/assignment_workout_attachment.test.sql",
+                  "d1000000-0000-4000-8000-000000000001",
+                  "d2000000-0000-4000-8000-000000000002",
+                  "test.attach_team_id",
+                  "test.attach_coach_id",
+              ),
+              (
+                  "supabase/tests/database/workflow_query_surfaces.test.sql",
+                  "c1000000-0000-4000-8000-000000000001",
+                  "c2000000-0000-4000-8000-000000000002",
+                  "test.query_team_id",
+                  "test.query_coach_id",
+              ),
+              (
+                  "supabase/tests/database/workout_assignment_scheduling.test.sql",
+                  "a1000000-0000-4000-8000-000000000001",
+                  "a2000000-0000-4000-8000-000000000002",
+                  "test.assignment_team_id",
+                  "test.assignment_coach_id",
+              ),
+              (
+                  "supabase/tests/database/workout_assignment_submissions.test.sql",
+                  "b1000000-0000-4000-8000-000000000001",
+                  "b2000000-0000-4000-8000-000000000002",
+                  "test.submission_team_id",
+                  "test.submission_coach_id",
+              ),
+              (
+                  "supabase/tests/database/workout_template_foundation.test.sql",
+                  "91000000-0000-4000-8000-000000000001",
+                  "92000000-0000-4000-8000-000000000002",
+                  "test.template_team_id",
+                  "test.template_coach_membership_id",
+              ),
+          ]
+
+          for filename, owner, coach, team_setting, coach_setting in fixtures:
+              path = Path(filename)
+              text = path.read_text()
+              marker = f"set local request.jwt.claim.sub = '{coach}';"
+              if text.count(marker) < 1:
+                  raise SystemExit(f"missing coach switch marker in {filename}")
+              if "Legacy fixture: explicitly grant Track authority" in text:
+                  continue
+              grant = f"""set local request.jwt.claim.sub = '{owner}';
+
+-- Legacy fixture: explicitly grant Track authority under the coach-scope model.
+update public.coach_training_permissions
+set can_prescribe = true,
+    can_review = true,
+    granted_by = '{owner}'::uuid
+where team_id = current_setting('{team_setting}')::uuid
+  and coach_membership_id = current_setting('{coach_setting}')::uuid
+  and workout_type = 'track';
+
+{marker}"""
+              text = text.replace(marker, grant, 1)
+              path.write_text(text)
+          PY
+
+      - name: Verify fixture edits
+        run: |
+          grep -R "Legacy fixture: explicitly grant Track authority" \
+            supabase/tests/database/assignment_workout_attachment.test.sql \
+            supabase/tests/database/workflow_query_surfaces.test.sql \
+            supabase/tests/database/workout_assignment_scheduling.test.sql \
+            supabase/tests/database/workout_assignment_submissions.test.sql \
+            supabase/tests/database/workout_template_foundation.test.sql
+
+      - name: Commit fixture repair and remove one-shot workflow
+        run: |
+          git config user.name "Amiri Prescod"
+          git config user.email "presso1717@gmail.com"
+          git rm .github/workflows/one-shot-coach-scope-fixture-repair.yml
+          git add supabase/tests/database/*.test.sql
+          git commit -m "test(auth): grant explicit scope in workflow fixtures"
+          git push origin HEAD:main
