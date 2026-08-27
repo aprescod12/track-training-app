@@ -125,6 +125,17 @@ select lives_ok(
   'owner can explicitly assign coach to athlete B'
 );
 
+set local request.jwt.claim.sub = 'a1000000-0000-4000-8000-000000000001';
+
+-- Legacy fixture: explicitly grant Track authority under the coach-scope model.
+update public.coach_training_permissions
+set can_prescribe = true,
+    can_review = true,
+    granted_by = 'a1000000-0000-4000-8000-000000000001'::uuid
+where team_id = current_setting('test.assignment_team_id')::uuid
+  and coach_membership_id = current_setting('test.assignment_coach_id')::uuid
+  and workout_type = 'track';
+
 set local request.jwt.claim.sub = 'a2000000-0000-4000-8000-000000000002';
 
 select lives_ok(

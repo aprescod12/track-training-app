@@ -52,6 +52,17 @@ select lives_ok(
   'owner assigns coach to athlete B'
 );
 
+set local request.jwt.claim.sub = 'd1000000-0000-4000-8000-000000000001';
+
+-- Legacy fixture: explicitly grant Track authority under the coach-scope model.
+update public.coach_training_permissions
+set can_prescribe = true,
+    can_review = true,
+    granted_by = 'd1000000-0000-4000-8000-000000000001'::uuid
+where team_id = current_setting('test.attach_team_id')::uuid
+  and coach_membership_id = current_setting('test.attach_coach_id')::uuid
+  and workout_type = 'track';
+
 set local request.jwt.claim.sub = 'd2000000-0000-4000-8000-000000000002';
 select lives_ok(
   $$insert into public.workout_templates(team_id,created_by_membership_id,title,workout_type) values(current_setting('test.attach_team_id')::uuid,current_setting('test.attach_coach_id')::uuid,'Attachment Template','track')$$,

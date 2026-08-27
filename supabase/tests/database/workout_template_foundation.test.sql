@@ -88,6 +88,17 @@ select lives_ok(
   'outsider can independently create another team'
 );
 
+set local request.jwt.claim.sub = '91000000-0000-4000-8000-000000000001';
+
+-- Legacy fixture: explicitly grant Track authority under the coach-scope model.
+update public.coach_training_permissions
+set can_prescribe = true,
+    can_review = true,
+    granted_by = '91000000-0000-4000-8000-000000000001'::uuid
+where team_id = current_setting('test.template_team_id')::uuid
+  and coach_membership_id = current_setting('test.template_coach_membership_id')::uuid
+  and workout_type = 'track';
+
 set local request.jwt.claim.sub = '92000000-0000-4000-8000-000000000002';
 
 select lives_ok(
