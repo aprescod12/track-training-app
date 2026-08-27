@@ -17,6 +17,10 @@ import {
   type UnavailableReason,
 } from "../../../lib/training";
 import {
+  coachHasTrainingPermission,
+  getMyCoachTrainingPermissions,
+} from "../../../lib/teams";
+import {
   attachWorkoutToAssignment,
   getPersonalWorkoutCandidates,
   type PersonalWorkoutCandidate,
@@ -58,6 +62,7 @@ export default function TeamTrainingAssignmentScreen() {
 
   const [athleteRow, setAthleteRow] = useState<AthleteAssignment | null>(null);
   const [coachRow, setCoachRow] = useState<CoachAssignment | null>(null);
+  const [coachCanReview, setCoachCanReview] = useState(false);
   const [entries, setEntries] = useState<AssignmentEntry[]>([]);
   const [personalWorkouts, setPersonalWorkouts] = useState<PersonalWorkoutCandidate[]>([]);
   const [athleteNote, setAthleteNote] = useState("");
@@ -78,6 +83,7 @@ export default function TeamTrainingAssignmentScreen() {
       if (own) {
         setAthleteRow(own);
         setCoachRow(null);
+        setCoachCanReview(false);
         setAthleteNote(own.athlete_note ?? "");
         if (own.unavailable_reason) setUnavailableReason(own.unavailable_reason);
         const [assignmentEntries, candidates] = await Promise.all([
@@ -92,7 +98,19 @@ export default function TeamTrainingAssignmentScreen() {
         setAthleteRow(null);
         setPersonalWorkouts([]);
         setCoachNote(coach?.coach_note ?? "");
-        setEntries(coach ? await getAssignmentEntries(coach.assignment_id) : []);
+        if (coach) {
+          const [assignmentEntries, permissions] = await Promise.all([
+            getAssignmentEntries(coach.assignment_id),
+            getMyCoachTrainingPermissions(coach.team_id),
+          ]);
+          setEntries(assignmentEntries);
+          setCoachCanReview(
+            coachHasTrainingPermission(permissions, coach.workout_type_snapshot, "review")
+          );
+        } else {
+          setEntries([]);
+          setCoachCanReview(false);
+        }
       }
     } catch (error: unknown) {
       setError(
@@ -102,6 +120,7 @@ export default function TeamTrainingAssignmentScreen() {
       );
       setAthleteRow(null);
       setCoachRow(null);
+      setCoachCanReview(false);
       setEntries([]);
       setPersonalWorkouts([]);
     } finally {
@@ -175,7 +194,7 @@ export default function TeamTrainingAssignmentScreen() {
   }
 
   async function review() {
-    if (!coachRow?.submission_id) return;
+    if (!coachRow?.submission_id || !coachCanReview) return;
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -346,15 +365,26 @@ export default function TeamTrainingAssignmentScreen() {
               {coachRow.workout_id && (
                 <PrimaryButton title="View athlete performance" onPress={() => router.push(`/workout/${coachRow.workout_id}`)} />
               )}
-              <TextInput
-                value={coachNote}
-                onChangeText={setCoachNote}
-                placeholder="Optional coach review note"
-                placeholderTextColor="#8A8A8A"
-                multiline
-                style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, color: c.text, borderRadius: 12, padding: 12, minHeight: 72, textAlignVertical: "top" }}
-              />
-              <PrimaryButton title={coachRow.reviewed_at ? "Update review" : "Mark reviewed"} onPress={review} disabled={saving} />
+              {coachCanReview ? (
+                <>
+                  <TextInput
+                    value={coachNote}
+                    onChangeText={setCoachNote}
+                    placeholder="Optional coach review note"
+                    placeholderTextColor="#8A8A8A"
+                    multiline
+                    style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, color: c.text, borderRadius: 12, padding: 12, minHeight: 72, textAlignVertical: "top" }}
+                  />
+                  <PrimaryButton title={coachRow.reviewed_at ? "Update review" : "Mark reviewed"} onPress={review} disabled={saving} />
+                </>
+              ) : (
+                <View style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, borderRadius: 12, padding: 12, gap: 4 }}>
+                  <Text style={{ color: c.text, fontWeight: "800" }}>View only</Text>
+                  <Text style={{ color: c.subtext }}>
+                    You are assigned to this athlete, so you can see this {coachRow.workout_type_snapshot === "lift" ? "Lift" : "Track"} context. Your team role does not include formal review authority for this training domain.
+                  </Text>
+                </View>
+              )}
             </>
           )}
         </View>
