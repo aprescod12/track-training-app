@@ -2,6 +2,8 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
 export function initNotificationHandler() {
+  if (Platform.OS === "web") return;
+
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldPlaySound: false,
@@ -13,6 +15,8 @@ export function initNotificationHandler() {
 }
 
 export async function ensureNotifPermission() {
+  if (Platform.OS === "web") return false;
+
   const perm = await Notifications.getPermissionsAsync();
   if (perm.status !== "granted") {
     const req = await Notifications.requestPermissionsAsync();
@@ -34,6 +38,10 @@ export async function scheduleEventReminder(params: {
   body?: string;
   triggerDate: Date;
 }) {
+  if (Platform.OS === "web") {
+    throw new Error("Local notification reminders are not available on web.");
+  }
+
   const id = await Notifications.scheduleNotificationAsync({
     content: {
       title: params.title,
@@ -49,5 +57,6 @@ export async function scheduleEventReminder(params: {
 }
 
 export async function cancelReminder(notificationId: string) {
+  if (Platform.OS === "web") return;
   await Notifications.cancelScheduledNotificationAsync(notificationId);
 }
