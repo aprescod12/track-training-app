@@ -3,6 +3,7 @@ import { Text, TextInput, Pressable } from "react-native";
 import { Stack, router } from "expo-router";
 import { supabase } from "../../lib/supabase";
 import { toAppError } from "../../lib/errors";
+import { getSignedInLandingRoute } from "../../lib/onboarding";
 import FormScreen from "../../components/FormScreen";
 import AlertModal from "../../components/AlertModal";
 import { useAppColors } from "../../lib/theme";
@@ -45,14 +46,15 @@ export default function LoginScreen() {
         return;
       }
 
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: e,
         password,
       });
 
       if (error) throw error;
 
-      router.replace("/(tabs)");
+      const landingRoute = await getSignedInLandingRoute(data.user?.id);
+      router.replace(landingRoute);
     } catch (err: unknown) {
       const appError = toAppError(err, {
         fallbackMessage: "Unable to log in. Please try again.",
