@@ -539,7 +539,7 @@ export default function TeamDetailScreen() {
                 Athlete visibility
               </Text>
               <Text style={{ color: c.subtext }}>
-                Explicitly choose which athletes each coach may see. This is independent from groups and training authority. Once assigned, the coach may view that athlete's team-context Track and Lift data, but may only prescribe or formally review enabled domains.
+                Explicitly choose which athletes each coach may see. This is independent from groups and training authority. Once assigned, the coach may view that athlete’s team-context Track and Lift data, but may only prescribe or formally review enabled domains.
               </Text>
               {athletes.map((athlete) => (
                 <View
