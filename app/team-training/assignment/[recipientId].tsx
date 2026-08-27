@@ -13,9 +13,13 @@ import {
   type AssignmentEntry,
   type AthleteAssignment,
   type CoachAssignment,
-  type AssignmentOutcome,
   type UnavailableReason,
 } from "../../../lib/training";
+import {
+  attachWorkoutToAssignment,
+  getPersonalWorkoutCandidates,
+  type PersonalWorkoutCandidate,
+} from "../../../lib/assignmentAttachment";
 
 function outcomeLabel(status: string | null) {
   switch (status) {
@@ -54,6 +58,7 @@ export default function TeamTrainingAssignmentScreen() {
   const [athleteRow, setAthleteRow] = useState<AthleteAssignment | null>(null);
   const [coachRow, setCoachRow] = useState<CoachAssignment | null>(null);
   const [entries, setEntries] = useState<AssignmentEntry[]>([]);
+  const [personalWorkouts, setPersonalWorkouts] = useState<PersonalWorkoutCandidate[]>([]);
   const [athleteNote, setAthleteNote] = useState("");
   const [coachNote, setCoachNote] = useState("");
   const [unavailableReason, setUnavailableReason] = useState<UnavailableReason>("injury");
@@ -74,11 +79,17 @@ export default function TeamTrainingAssignmentScreen() {
         setCoachRow(null);
         setAthleteNote(own.athlete_note ?? "");
         if (own.unavailable_reason) setUnavailableReason(own.unavailable_reason);
-        setEntries(await getAssignmentEntries(own.assignment_id));
+        const [assignmentEntries, candidates] = await Promise.all([
+          getAssignmentEntries(own.assignment_id),
+          getPersonalWorkoutCandidates(own.scheduled_date),
+        ]);
+        setEntries(assignmentEntries);
+        setPersonalWorkouts(candidates);
       } else {
         const coach = await getCoachAssignment(id);
         setCoachRow(coach);
         setAthleteRow(null);
+        setPersonalWorkouts([]);
         setCoachNote(coach?.coach_note ?? "");
         setEntries(coach ? await getAssignmentEntries(coach.assignment_id) : []);
       }
@@ -87,6 +98,7 @@ export default function TeamTrainingAssignmentScreen() {
       setAthleteRow(null);
       setCoachRow(null);
       setEntries([]);
+      setPersonalWorkouts([]);
     } finally {
       setLoading(false);
     }
@@ -125,19 +137,28 @@ export default function TeamTrainingAssignmentScreen() {
     }
   }
 
-  function logOutcome(outcome: Exclude<AssignmentOutcome, "skipped" | "unavailable">) {
+  async function attachPerformance(
+    workoutId: string,
+    completionStatus: "completed" | "partially_completed" | "modified"
+  ) {
     if (!athleteRow) return;
-    router.push({
-      pathname: "/modal",
-      params: {
-        date: athleteRow.scheduled_date,
-        teamId: athleteRow.team_id,
-        assignmentRecipientId: athleteRow.assignment_recipient_id,
-        assignmentOutcome: outcome,
-        title: athleteRow.title_snapshot,
-        workoutType: athleteRow.workout_type_snapshot,
-      },
-    });
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await attachWorkoutToAssignment({
+        recipientId: athleteRow.assignment_recipient_id,
+        workoutId,
+        completionStatus,
+        athleteNote,
+      });
+      setMessage("Workout attached to the team assignment.");
+      await load();
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function review() {
@@ -245,9 +266,32 @@ export default function TeamTrainingAssignmentScreen() {
                 multiline
                 style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, color: c.text, borderRadius: 12, padding: 12, minHeight: 72, textAlignVertical: "top" }}
               />
-              <PrimaryButton title="Completed — log performance" onPress={() => logOutcome("completed")} disabled={saving} />
-              <PrimaryButton title="Partially completed — log performance" onPress={() => logOutcome("partially_completed")} disabled={saving} />
-              <PrimaryButton title="Modified — log performance" onPress={() => logOutcome("modified")} disabled={saving} />
+
+              <PrimaryButton
+                title="Log a workout for this assignment date"
+                onPress={() => router.push(`/modal?date=${athleteRow.scheduled_date}`)}
+                disabled={saving}
+              />
+
+              {personalWorkouts.length === 0 ? (
+                <Text style={{ color: c.subtext }}>
+                  After logging a workout for {athleteRow.scheduled_date}, return here and attach it. It remains personal until you explicitly attach it.
+                </Text>
+              ) : (
+                <View style={{ gap: 8 }}>
+                  <Text style={{ fontWeight: "800", color: c.text }}>Attach a personal workout</Text>
+                  {personalWorkouts.map((workout) => (
+                    <View key={workout.id} style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, borderRadius: 12, padding: 10, gap: 7 }}>
+                      <Text style={{ fontWeight: "800", color: c.text }}>{workout.title}</Text>
+                      <Text style={{ color: c.subtext }}>{workout.workout_type === "lift" ? "Lift" : "Track"} · currently personal</Text>
+                      <PrimaryButton title="Attach as completed" onPress={() => attachPerformance(workout.id, "completed")} disabled={saving} />
+                      <PrimaryButton title="Attach as partially completed" onPress={() => attachPerformance(workout.id, "partially_completed")} disabled={saving} />
+                      <PrimaryButton title="Attach as modified" onPress={() => attachPerformance(workout.id, "modified")} disabled={saving} />
+                    </View>
+                  ))}
+                </View>
+              )}
+
               <PrimaryButton title="Skipped" onPress={() => submitSimple("skipped")} disabled={saving} />
 
               <Text style={{ fontWeight: "800", color: c.text, marginTop: 4 }}>Unavailable</Text>
