@@ -1,9 +1,9 @@
 # Track Training App - Coach-Athlete Workflow Production Contract
 
-**Status:** Draft for product approval before database implementation  
+**Status:** Implemented and production-live  
 **Target repository:** `aprescod12/track-training-app`  
 **Target branch:** `main`  
-**Phase:** Production Roadmap Phase 3 / proposed Migration D family  
+**Phase:** Production Roadmap Phase 3 / Migration D family  
 **Depends on:** Team Identity Foundation (Migration A), Coaching and Training Access (Migration B), Trust Layer (Migration C)
 
 ---
@@ -655,9 +655,9 @@ At minimum, prove:
 
 ---
 
-## 26. Proposed Migration D Implementation Sequence
+## 26. Migration D Implementation Sequence
 
-To keep production changes reviewable, implement the contract as several migrations rather than one large migration.
+The contract was implemented as several reviewable migrations rather than one large migration.
 
 ### D1 - Workout Template Foundation
 
@@ -688,12 +688,13 @@ To keep production changes reviewable, implement the contract as several migrati
 
 ### D4 - Product Query Surfaces and Notifications Integration
 
-- security-invoker read views only if needed for efficient athlete inbox / coach dashboard queries
+- security-invoker athlete inbox and coach dashboard views
 - calendar integration at the application/view-model layer
-- notification event integration
+- downstream local notification integration
+- explicit athlete-controlled personal-workout-to-assignment attachment RPC
 - no change to core authorization semantics
 
-Each migration must pass fresh local migration replay, database lint, focused pgTAP authorization tests, application lint/type checks/tests, hosted deployment verification, migration-ledger reconciliation where necessary, advisors, and regenerated `lib/database.types.ts` before the phase is considered production-complete.
+Each migration passed fresh local migration replay, database lint, focused pgTAP authorization tests, application lint/type checks/tests, hosted deployment verification, migration-ledger reconciliation where necessary, advisors, and regenerated `lib/database.types.ts` before the phase was marked production-complete.
 
 ---
 
@@ -721,15 +722,28 @@ The following remain separate future work unless deliberately pulled into a late
 
 ## 28. Repository Implementation References
 
-Implementation should remain consistent with the current repository architecture, especially:
+Production implementation is represented by the following repository-managed changes:
 
-- `supabase/migrations/20260827004953_coaching_training_access.sql`
-- `supabase/migrations/20260827010800_trust_layer.sql`
-- `supabase/migrations/20260827011900_trust_layer_fk_indexes.sql`
-- `supabase/tests/database/coach_athlete_training_access.test.sql`
-- `supabase/tests/database/coach_athlete_assignment_integrity.test.sql`
-- `app/modal.tsx`
+- `supabase/migrations/20260827013700_workout_template_foundation.sql`
+- `supabase/migrations/20260827015000_workout_assignment_scheduling.sql`
+- `supabase/migrations/20260827015800_workout_assignment_submissions.sql`
+- `supabase/migrations/20260827021500_workflow_query_surfaces.sql`
+- `supabase/migrations/20260827022500_assignment_workout_attachment.sql`
+- `supabase/migrations/20260827023500_workflow_fk_index_cleanup.sql`
+- `supabase/tests/database/workout_template_foundation.test.sql`
+- `supabase/tests/database/workout_assignment_scheduling.test.sql`
+- `supabase/tests/database/workout_assignment_submissions.test.sql`
+- `supabase/tests/database/workflow_query_surfaces.test.sql`
+- `supabase/tests/database/assignment_workout_attachment.test.sql`
+- `lib/training.ts`
+- `lib/trainingNotifications.ts`
+- `app/team-training/index.tsx`
+- `app/team-training/template-new.tsx`
+- `app/team-training/assign.tsx`
+- `app/team-training/assignment/[recipientId].tsx`
 - `app/(tabs)/calendar.tsx`
+- `app/calendar/[date].tsx`
+- `app/_layout.tsx`
 - `lib/database.types.ts`
 
 ---
@@ -741,3 +755,23 @@ The Migration D family is production-complete only when the following end-to-end
 **coach creates reusable training -> coach assigns authorized athlete(s) -> athlete sees scheduled assignment -> athlete logs or reports outcome -> athlete submission preserves prescription vs actual performance -> authorized coach reviews -> coach dashboard reflects status -> no unrelated athlete data is exposed.**
 
 The workflow must demonstrate the roadmap's intended Track Team Training and Performance Platform while preserving the A-C rule that identity, team management, trust, social relationships, and coaching authorization are separate relationship graphs.
+
+---
+
+## 30. Production Completion Record
+
+Migration D is implemented and deployed on the hosted Supabase project with the repository migration ledger aligned through `20260827023500_workflow_fk_index_cleanup`.
+
+Production verification at completion confirmed:
+
+- all Migration D source-of-truth tables and controlled RPCs are deployed;
+- `athlete_assignment_inbox_v` and `coach_assignment_dashboard_v` are `security_invoker` views;
+- anonymous access is not granted to the workflow views/tables;
+- the explicit attachment workflow keeps existing workouts personal until the athlete deliberately links one to an assignment;
+- no Migration D-specific unindexed foreign-key advisory remains;
+- no new Migration D security advisor warning was introduced;
+- existing production data was not reclassified: 36 existing workouts remained personal and zero team-context workouts/workflow rows were introduced by deployment;
+- generated TypeScript types were refreshed from the hosted schema;
+- the final repository CI gate requires application lint, TypeScript checks, application tests, fresh migration replay, database lint, and database authorization tests to pass together.
+
+The two pre-existing security advisor items remain outside Migration D: the intentionally reviewed `accept_team_invitation` SECURITY DEFINER warning and Supabase Auth leaked-password protection being disabled in project settings.
