@@ -4,6 +4,7 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import FormScreen from "../../../components/FormScreen";
 import PrimaryButton from "../../../components/PrimaryButton";
 import { useAppColors } from "../../../lib/theme";
+import { toAppError } from "../../../lib/errors";
 import {
   getAssignmentEntries,
   getAthleteAssignment,
@@ -93,8 +94,12 @@ export default function TeamTrainingAssignmentScreen() {
         setCoachNote(coach?.coach_note ?? "");
         setEntries(coach ? await getAssignmentEntries(coach.assignment_id) : []);
       }
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
+    } catch (error: unknown) {
+      setError(
+        toAppError(error, {
+          fallbackMessage: "Could not load this assignment. Please try again.",
+        }).message
+      );
       setAthleteRow(null);
       setCoachRow(null);
       setEntries([]);
@@ -130,8 +135,12 @@ export default function TeamTrainingAssignmentScreen() {
       });
       setMessage("Assignment response saved.");
       await load();
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
+    } catch (error: unknown) {
+      setError(
+        toAppError(error, {
+          fallbackMessage: "Could not save your assignment response. Please try again.",
+        }).message
+      );
     } finally {
       setSaving(false);
     }
@@ -154,8 +163,12 @@ export default function TeamTrainingAssignmentScreen() {
       });
       setMessage("Workout attached to the team assignment.");
       await load();
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
+    } catch (error: unknown) {
+      setError(
+        toAppError(error, {
+          fallbackMessage: "Could not attach that workout. Check the assignment and try again.",
+        }).message
+      );
     } finally {
       setSaving(false);
     }
@@ -173,8 +186,12 @@ export default function TeamTrainingAssignmentScreen() {
       });
       setMessage("Submission reviewed.");
       await load();
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
+    } catch (error: unknown) {
+      setError(
+        toAppError(error, {
+          fallbackMessage: "Could not save the coach review. Please try again.",
+        }).message
+      );
     } finally {
       setSaving(false);
     }
