@@ -5,6 +5,7 @@ import FormScreen from "../../components/FormScreen";
 import PrimaryButton from "../../components/PrimaryButton";
 import { useAppColors } from "../../lib/theme";
 import { formatYMD } from "../../lib/date";
+import { toAppError } from "../../lib/errors";
 import {
   createWorkoutAssignment,
   getActiveCoachTeams,
@@ -41,8 +42,12 @@ export default function AssignWorkoutScreen() {
       const rows = await getActiveCoachTeams();
       setTeams(rows);
       setTeamId((current) => current || rows[0]?.team_id || "");
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
+    } catch (error: unknown) {
+      setError(
+        toAppError(error, {
+          fallbackMessage: "Could not load your coach teams. Please try again.",
+        }).message
+      );
     }
   }, []);
 
@@ -75,8 +80,14 @@ export default function AssignWorkoutScreen() {
         setGroupId(groupRows[0]?.id ?? "");
         setSelectedAthletes([]);
       })
-      .catch((e: any) => {
-        if (!cancelled) setError(e?.message ?? String(e));
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setError(
+            toAppError(error, {
+              fallbackMessage: "Could not load assignment options for this team. Please try again.",
+            }).message
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingOptions(false);
@@ -122,8 +133,12 @@ export default function AssignWorkoutScreen() {
         athleteMembershipIds: targetMode === "athletes" ? selectedAthletes : [],
       });
       router.replace("/team-training");
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
+    } catch (error: unknown) {
+      setError(
+        toAppError(error, {
+          fallbackMessage: "Could not create the assignment. Check the recipients and try again.",
+        }).message
+      );
     } finally {
       setSaving(false);
     }
