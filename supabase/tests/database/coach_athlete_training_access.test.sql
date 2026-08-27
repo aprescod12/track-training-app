@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(24);
+select plan(25);
 
 insert into auth.users (id, email) values
   ('10000000-0000-4000-8000-000000000001', 'owner-coach-access@example.com'),
@@ -142,27 +142,34 @@ $$;
 
 select lives_ok(
   $$
-    with personal_entry as (
+    do $test$
+    declare
+      v_personal_entry_id uuid;
+      v_team_entry_id uuid;
+    begin
       insert into public.workout_entries (workout_id, label, user_id)
       values (
         current_setting('test.personal_workout_id')::uuid,
         'Private entry',
         '30000000-0000-4000-8000-000000000003'::uuid
       )
-      returning id
-    ), team_entry as (
+      returning id into v_personal_entry_id;
+
       insert into public.workout_entries (workout_id, label, user_id)
       values (
         current_setting('test.team_workout_id')::uuid,
         'Team entry',
         '30000000-0000-4000-8000-000000000003'::uuid
       )
-      returning id
-    )
-    insert into public.entry_sets (entry_id, set_number, reps)
-    select id, 1, 1 from personal_entry
-    union all
-    select id, 1, 1 from team_entry
+      returning id into v_team_entry_id;
+
+      insert into public.entry_sets (entry_id, set_number, reps)
+      values (v_personal_entry_id, 1, 1);
+
+      insert into public.entry_sets (entry_id, set_number, reps)
+      values (v_team_entry_id, 1, 1);
+    end
+    $test$
   $$,
   'athlete can create child training data for both workouts'
 );
@@ -324,6 +331,7 @@ select results_eq(
   'ended assignment remains available historically to its coach participant'
 );
 
+set local request.jwt.claim.sub = '30000000-0000-4000-8000-000000000003';
 select results_eq(
   $$select count(*) from public.friendships$$,
   array[1::bigint],
