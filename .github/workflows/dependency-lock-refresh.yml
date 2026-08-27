@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   refresh-lock:
-    if: github.event.head_commit.message != 'chore(deps): refresh nonbreaking security lock'
+    if: ${{ !contains(github.event.head_commit.message, 'refresh nonbreaking security lock') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
