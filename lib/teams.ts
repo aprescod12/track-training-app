@@ -301,7 +301,7 @@ export async function getTeamWorkspace(teamId: string): Promise<TeamWorkspace> {
   const myMembership = members.find((member: TeamMember) => member.user_id === user.id);
   if (!myMembership) {
     throw new AppError({
-      kind: "authorization",
+      kind: "permission",
       message: "You do not have an active membership on this team.",
     });
   }
