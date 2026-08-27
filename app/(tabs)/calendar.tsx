@@ -29,6 +29,12 @@ type EventRow = {
   ends_at: string | null;
 };
 
+type TrainingMarkerCounts = {
+  track: number;
+  lift: number;
+  total: number;
+};
+
 function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
@@ -115,7 +121,7 @@ export default function CalendarScreen() {
   );
 
   const workoutCounts = useMemo(() => {
-    const map: Record<string, { track: number; lift: number; total: number }> = {};
+    const map: Record<string, TrainingMarkerCounts> = {};
     for (const workout of monthWorkouts) {
       if (!map[workout.workout_date]) {
         map[workout.workout_date] = { track: 0, lift: 0, total: 0 };
@@ -136,9 +142,13 @@ export default function CalendarScreen() {
   }, [monthEvents]);
 
   const assignmentCounts = useMemo(() => {
-    const map: Record<string, number> = {};
+    const map: Record<string, TrainingMarkerCounts> = {};
     for (const assignment of monthAssignments) {
-      map[assignment.scheduled_date] = (map[assignment.scheduled_date] ?? 0) + 1;
+      if (!map[assignment.scheduled_date]) {
+        map[assignment.scheduled_date] = { track: 0, lift: 0, total: 0 };
+      }
+      map[assignment.scheduled_date][assignment.workout_type_snapshot] += 1;
+      map[assignment.scheduled_date].total += 1;
     }
     return map;
   }, [monthAssignments]);
@@ -234,16 +244,23 @@ export default function CalendarScreen() {
     [nextMonth, previousMonth]
   );
 
-  const dotTrack = c.dark ? "#34D399" : "green";
-  const dotLift = c.dark ? "#60A5FA" : "blue";
-
   return (
     <FormScreen refreshControlProps={{ refreshing, onRefresh }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
         <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Calendar</Text>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <PrimaryButton title="Team training" onPress={() => router.push("/team-training")} />
-          <PrimaryButton title="Add event" onPress={() => router.push(`/calendar/add-event?date=${selectedKey}`)} />
+          <PrimaryButton
+            title="Add event"
+            onPress={() => router.push(`/calendar/add-event?date=${selectedKey}`)}
+          />
         </View>
       </View>
 
@@ -251,9 +268,22 @@ export default function CalendarScreen() {
 
       <View
         {...panResponder.panHandlers}
-        style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.card, borderRadius: 14, padding: 14, gap: 10 }}
+        style={{
+          borderWidth: 1,
+          borderColor: c.border,
+          backgroundColor: c.card,
+          borderRadius: 14,
+          padding: 14,
+          gap: 10,
+        }}
       >
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <Pressable onPress={previousMonth} style={{ padding: 8 }}>
             <Text style={{ fontSize: 18, color: c.text }}>‹</Text>
           </Pressable>
@@ -265,7 +295,15 @@ export default function CalendarScreen() {
 
         <View style={{ flexDirection: "row" }}>
           {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((weekday) => (
-            <Text key={weekday} style={{ width: `${100 / 7}%`, textAlign: "center", fontSize: 12, color: c.subtext }}>
+            <Text
+              key={weekday}
+              style={{
+                width: `${100 / 7}%`,
+                textAlign: "center",
+                fontSize: 12,
+                color: c.subtext,
+              }}
+            >
               {weekday}
             </Text>
           ))}
@@ -274,34 +312,106 @@ export default function CalendarScreen() {
         <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
           {grid.map(({ date, inMonth }) => {
             const key = formatYMD(date);
-            const counts = workoutCounts[key];
+            const logged = workoutCounts[key];
+            const assigned = assignmentCounts[key];
             const selected = isSameDay(date, selectedDate);
             const isToday = isSameDay(date, today);
             const hasEvent = (eventCounts[key] ?? 0) > 0;
-            const hasAssignment = (assignmentCounts[key] ?? 0) > 0;
+            const hasTrainingMarker =
+              (logged?.total ?? 0) > 0 || (assigned?.total ?? 0) > 0;
 
             return (
               <Pressable
                 key={date.toISOString()}
                 onPress={() => setSelectedDate(date)}
-                style={{ width: `${100 / 7}%`, paddingVertical: 10, alignItems: "center", opacity: inMonth ? 1 : 0.35 }}
+                style={{
+                  width: `${100 / 7}%`,
+                  paddingVertical: 10,
+                  alignItems: "center",
+                  opacity: inMonth ? 1 : 0.35,
+                }}
               >
-                <View style={{ position: "absolute", top: 1, flexDirection: "row", gap: 3 }}>
-                  {hasEvent && <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: c.primary }} />}
-                  {hasAssignment && <View style={{ width: 6, height: 6, borderRadius: 999, borderWidth: 1, borderColor: c.primary, backgroundColor: c.card }} />}
-                </View>
+                {hasEvent && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 1,
+                      width: 6,
+                      height: 6,
+                      borderRadius: 999,
+                      backgroundColor: c.event,
+                    }}
+                  />
+                )}
 
-                <View style={{ minWidth: 32, height: 32, borderRadius: 999, alignItems: "center", justifyContent: "center", borderWidth: selected ? 2 : isToday ? 1 : 0, borderColor: selected ? c.primary : c.border, backgroundColor: selected ? c.primary : "transparent" }}>
-                  <Text style={{ color: selected ? c.primaryText : c.text, fontWeight: selected ? "800" : "400" }}>
+                <View
+                  style={{
+                    minWidth: 32,
+                    height: 32,
+                    borderRadius: 999,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderWidth: selected ? 2 : isToday ? 1 : 0,
+                    borderColor: selected ? c.primary : c.border,
+                    backgroundColor: selected ? c.primary : "transparent",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: selected ? c.primaryText : c.text,
+                      fontWeight: selected ? "800" : "400",
+                    }}
+                  >
                     {date.getDate()}
                   </Text>
                 </View>
 
-                {(counts?.total ?? 0) > 0 && (
+                {hasTrainingMarker && (
                   <View style={{ flexDirection: "row", gap: 3, marginTop: 4 }}>
-                    {(counts?.track ?? 0) > 0 && <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: dotTrack }} />}
-                    {(counts?.lift ?? 0) > 0 && <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: dotLift }} />}
-                    {(counts?.total ?? 0) > 2 && <Text style={{ fontSize: 10, fontWeight: "800", color: c.subtext }}>{counts?.total}</Text>}
+                    {(assigned?.track ?? 0) > 0 && (
+                      <View
+                        style={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: 999,
+                          borderWidth: 1.5,
+                          borderColor: c.track,
+                          backgroundColor: c.card,
+                        }}
+                      />
+                    )}
+                    {(assigned?.lift ?? 0) > 0 && (
+                      <View
+                        style={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: 999,
+                          borderWidth: 1.5,
+                          borderColor: c.lift,
+                          backgroundColor: c.card,
+                        }}
+                      />
+                    )}
+                    {(logged?.track ?? 0) > 0 && (
+                      <View
+                        style={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: 999,
+                          backgroundColor: c.track,
+                        }}
+                      />
+                    )}
+                    {(logged?.lift ?? 0) > 0 && (
+                      <View
+                        style={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: 999,
+                          backgroundColor: c.lift,
+                        }}
+                      />
+                    )}
                   </View>
                 )}
               </Pressable>
@@ -309,16 +419,68 @@ export default function CalendarScreen() {
           })}
         </View>
 
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-          <Text style={{ color: c.subtext }}>● personal event</Text>
-          <Text style={{ color: c.subtext }}>○ assigned workout</Text>
-          <Text style={{ color: c.subtext }}>● logged workout</Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <View
+              style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: c.event }}
+            />
+            <Text style={{ color: c.subtext }}>event</Text>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <View
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: 999,
+                borderWidth: 1.5,
+                borderColor: c.track,
+              }}
+            />
+            <Text style={{ color: c.subtext }}>track assigned</Text>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <View
+              style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: c.track }}
+            />
+            <Text style={{ color: c.subtext }}>track logged</Text>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <View
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: 999,
+                borderWidth: 1.5,
+                borderColor: c.lift,
+              }}
+            />
+            <Text style={{ color: c.subtext }}>lift assigned</Text>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <View
+              style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: c.lift }}
+            />
+            <Text style={{ color: c.subtext }}>lift logged</Text>
+          </View>
         </View>
       </View>
 
-      <View style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.card, borderRadius: 14, padding: 14, gap: 12 }}>
+      <View
+        style={{
+          borderWidth: 1,
+          borderColor: c.border,
+          backgroundColor: c.card,
+          borderRadius: 14,
+          padding: 14,
+          gap: 12,
+        }}
+      >
         <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>
-          {selectedDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+          {selectedDate.toLocaleDateString(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          })}
         </Text>
 
         {selectedDayAssignments.length > 0 && (
@@ -327,10 +489,33 @@ export default function CalendarScreen() {
             {selectedDayAssignments.map((assignment) => (
               <Pressable
                 key={assignment.assignment_recipient_id}
-                onPress={() => router.push(`/team-training/assignment/${assignment.assignment_recipient_id}`)}
-                style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, borderRadius: 14, padding: 12, gap: 5 }}
+                onPress={() =>
+                  router.push(`/team-training/assignment/${assignment.assignment_recipient_id}`)
+                }
+                style={{
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  backgroundColor: c.bg,
+                  borderRadius: 14,
+                  padding: 12,
+                  gap: 5,
+                }}
               >
-                <Text style={{ fontWeight: "800", color: c.text }}>{assignment.title_snapshot}</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+                  <View
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 999,
+                      borderWidth: 1.5,
+                      borderColor:
+                        assignment.workout_type_snapshot === "lift" ? c.lift : c.track,
+                    }}
+                  />
+                  <Text style={{ fontWeight: "800", color: c.text, flex: 1 }}>
+                    {assignment.title_snapshot}
+                  </Text>
+                </View>
                 <Text style={{ color: c.subtext }}>
                   {assignment.team_name ?? "Team"} · {assignmentStatus(assignment)}
                 </Text>
@@ -344,12 +529,46 @@ export default function CalendarScreen() {
           <View style={{ gap: 8 }}>
             <Text style={{ fontWeight: "800", color: c.text }}>Events</Text>
             {selectedDayEvents.map((event) => (
-              <Pressable key={event.id} onPress={() => router.push(`/calendar/event/${event.id}`)} style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, borderRadius: 14, padding: 12, gap: 5 }}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 10 }}>
-                  <Text style={{ fontWeight: "800", color: c.text, flex: 1 }}>{event.title}</Text>
+              <Pressable
+                key={event.id}
+                onPress={() => router.push(`/calendar/event/${event.id}`)}
+                style={{
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  backgroundColor: c.bg,
+                  borderRadius: 14,
+                  padding: 12,
+                  gap: 5,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 7, flex: 1 }}>
+                    <View
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 999,
+                        backgroundColor: c.event,
+                      }}
+                    />
+                    <Text style={{ fontWeight: "800", color: c.text, flex: 1 }}>
+                      {event.title}
+                    </Text>
+                  </View>
                   <Text style={{ color: c.subtext }}>{formatEventTime(event.starts_at)}</Text>
                 </View>
-                {!!event.notes && <Text numberOfLines={2} style={{ color: c.subtext }}>{event.notes}</Text>}
+                {!!event.notes && (
+                  <Text numberOfLines={2} style={{ color: c.subtext }}>
+                    {event.notes}
+                  </Text>
+                )}
                 <Text style={{ fontWeight: "700", color: c.text }}>View event →</Text>
               </Pressable>
             ))}
@@ -360,22 +579,59 @@ export default function CalendarScreen() {
           <View style={{ gap: 8 }}>
             <Text style={{ fontWeight: "800", color: c.text }}>Workouts</Text>
             {selectedDayWorkouts.map((workout) => (
-              <Pressable key={workout.id} onPress={() => router.push(`/workout/${workout.id}`)} style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, borderRadius: 14, padding: 12, gap: 5 }}>
-                <Text style={{ fontWeight: "800", color: c.text }}>{workout.title}</Text>
-                {!!workout.notes && <Text numberOfLines={2} style={{ color: c.subtext }}>{workout.notes}</Text>}
+              <Pressable
+                key={workout.id}
+                onPress={() => router.push(`/workout/${workout.id}`)}
+                style={{
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  backgroundColor: c.bg,
+                  borderRadius: 14,
+                  padding: 12,
+                  gap: 5,
+                }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+                  <View
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 999,
+                      backgroundColor: workout.workout_type === "lift" ? c.lift : c.track,
+                    }}
+                  />
+                  <Text style={{ fontWeight: "800", color: c.text, flex: 1 }}>
+                    {workout.title}
+                  </Text>
+                </View>
+                {!!workout.notes && (
+                  <Text numberOfLines={2} style={{ color: c.subtext }}>
+                    {workout.notes}
+                  </Text>
+                )}
                 <Text style={{ fontWeight: "700", color: c.text }}>View workout →</Text>
               </Pressable>
             ))}
           </View>
         )}
 
-        {selectedDayAssignments.length === 0 && selectedDayEvents.length === 0 && selectedDayWorkouts.length === 0 && (
-          <Text style={{ color: c.subtext }}>No events, assigned workouts, or logged workouts for this day.</Text>
-        )}
+        {selectedDayAssignments.length === 0 &&
+          selectedDayEvents.length === 0 &&
+          selectedDayWorkouts.length === 0 && (
+            <Text style={{ color: c.subtext }}>
+              No events, assigned workouts, or logged workouts for this day.
+            </Text>
+          )}
 
         <View style={{ gap: 8 }}>
-          <PrimaryButton title="Log workout for this day" onPress={() => router.push(`/modal?date=${selectedKey}`)} />
-          <PrimaryButton title="View full day" onPress={() => router.push(`/calendar/${selectedKey}`)} />
+          <PrimaryButton
+            title="Log workout for this day"
+            onPress={() => router.push(`/modal?date=${selectedKey}`)}
+          />
+          <PrimaryButton
+            title="View full day"
+            onPress={() => router.push(`/calendar/${selectedKey}`)}
+          />
         </View>
       </View>
     </FormScreen>
