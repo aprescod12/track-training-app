@@ -1,0 +1,35 @@
+name: One-shot run field profile sweep
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-shot-run-field-profile-sweep.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply profile migration
+        run: python3 scripts/field-profile-surface-sweep.py
+      - name: Verify migration
+        run: |
+          grep -q 'Running Stats' app/profile/track-stats.tsx
+          grep -q 'stats.jumpWorkouts' 'app/(tabs)/profile.tsx'
+          grep -q 'allTimeJumps' app/profile/overview.tsx
+          grep -q 'title="Field Stats"' app/profile/training-hub.tsx
+          grep -q 'name="profile/field-stats"' app/_layout.tsx
+      - name: Commit migration and cleanup
+        run: |
+          git config user.name "Amiri Prescod"
+          git config user.email "presso1717@gmail.com"
+          git rm .github/workflows/one-shot-run-field-profile-sweep.yml scripts/field-profile-surface-sweep.py
+          git add app
+          git commit -m "feat(field): integrate profile performance domains"
+          git push origin HEAD:main
