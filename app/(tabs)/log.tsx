@@ -6,12 +6,14 @@ import { supabase } from "../../lib/supabase";
 import { formatYMD } from "../../lib/date";
 import FormScreen from "../../components/FormScreen";
 import { useAppColors } from "../../lib/theme";
+import { trainingDomainLabel } from "../../lib/trainingDomains";
 
 type Workout = {
   id: string;
   workout_date: string;
   title: string;
   notes: string | null;
+  workout_type: string;
 };
 
 type FilterKey = "all" | "7d" | "30d";
@@ -26,6 +28,12 @@ function daysAgo(base: Date, days: number) {
   const copy = new Date(base);
   copy.setDate(copy.getDate() - days);
   return copy;
+}
+
+function workoutHref(workout: Workout) {
+  return workout.workout_type === "jumps" || workout.workout_type === "throws"
+    ? `/field-workout/${workout.id}`
+    : `/workout/${workout.id}`;
 }
 
 export default function WorkoutsScreen() {
@@ -54,7 +62,7 @@ export default function WorkoutsScreen() {
 
     const { data, error } = await supabase
       .from("workouts")
-      .select("id, workout_date, title, notes")
+      .select("id, workout_date, title, notes, workout_type")
       .eq("user_id", uid)
       .order("workout_date", { ascending: false })
       .order("created_at", { ascending: false })
@@ -66,8 +74,7 @@ export default function WorkoutsScreen() {
       return;
     }
 
-    const rows = (data ?? []) as Workout[];
-    setItems(rows);
+    setItems((data ?? []) as Workout[]);
   }, []);
 
   useFocusEffect(
@@ -122,24 +129,14 @@ export default function WorkoutsScreen() {
   ];
 
   return (
-    <FormScreen
-      refreshControlProps={{
-        refreshing,
-        onRefresh,
-      }}
-    >
+    <FormScreen refreshControlProps={{ refreshing, onRefresh }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Workouts</Text>
-        <PrimaryButton title="Log workout" onPress={() => router.push("/modal")} />
+        <PrimaryButton title="Log workout" onPress={() => router.push("/workout/new")} />
       </View>
 
-      {error && (
-        <Text style={{ color: "#ef4444", fontWeight: "600" }}>
-          {error}
-        </Text>
-      )}
+      {error && <Text style={{ color: "#ef4444", fontWeight: "600" }}>{error}</Text>}
 
-      {/* Today */}
       <View
         style={{
           borderWidth: 1,
@@ -154,26 +151,40 @@ export default function WorkoutsScreen() {
 
         {todaysWorkout ? (
           <>
-            <Text style={{ fontWeight: "700", color: c.text }}>{todaysWorkout.title}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <Text style={{ fontWeight: "700", color: c.text }}>{todaysWorkout.title}</Text>
+              <View
+                style={{
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  borderRadius: 999,
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  backgroundColor: c.bg,
+                }}
+              >
+                <Text style={{ color: c.subtext, fontSize: 12, fontWeight: "700" }}>
+                  {trainingDomainLabel(todaysWorkout.workout_type)}
+                </Text>
+              </View>
+            </View>
             {!!todaysWorkout.notes && <Text style={{ color: c.text }}>{todaysWorkout.notes}</Text>}
-            <Pressable onPress={() => router.push(`/workout/${todaysWorkout.id}`)}>
+            <Pressable onPress={() => router.push(workoutHref(todaysWorkout) as any)}>
               <Text style={{ marginTop: 6, fontWeight: "700", color: c.text }}>View details →</Text>
             </Pressable>
           </>
         ) : (
           <>
             <Text style={{ color: c.subtext }}>No workout logged today.</Text>
-            <Pressable onPress={() => router.push("/modal")}>
+            <Pressable onPress={() => router.push("/workout/new")}>
               <Text style={{ marginTop: 6, fontWeight: "700", color: c.text }}>Log today’s workout →</Text>
             </Pressable>
           </>
         )}
       </View>
 
-      {/* Filter selector */}
       <View style={{ gap: 10 }}>
         <Text style={{ fontWeight: "800", color: c.text }}>Recent</Text>
-
         <View
           style={{
             flexDirection: "row",
@@ -187,7 +198,6 @@ export default function WorkoutsScreen() {
         >
           {filterOptions.map((option) => {
             const selected = filter === option.key;
-
             return (
               <Pressable
                 key={option.key}
@@ -219,7 +229,6 @@ export default function WorkoutsScreen() {
         </View>
       </View>
 
-      {/* Recent grid */}
       <View style={{ gap: 10 }}>
         <Text style={{ color: c.subtext }}>{filterLabel}</Text>
 
@@ -241,7 +250,7 @@ export default function WorkoutsScreen() {
             {filteredWorkouts.map((w) => (
               <Pressable
                 key={w.id}
-                onPress={() => router.push(`/workout/${w.id}`)}
+                onPress={() => router.push(workoutHref(w) as any)}
                 style={{
                   width: cardWidth,
                   borderWidth: 1,
@@ -255,15 +264,15 @@ export default function WorkoutsScreen() {
                 <Text numberOfLines={2} style={{ fontWeight: "800", color: c.text }}>
                   {w.title}
                 </Text>
-
                 <Text style={{ color: c.subtext }}>{w.workout_date}</Text>
-
+                <Text style={{ color: c.subtext, fontSize: 12, fontWeight: "700" }}>
+                  {trainingDomainLabel(w.workout_type)}
+                </Text>
                 {!!w.notes && (
                   <Text numberOfLines={3} style={{ color: c.subtext }}>
                     {w.notes}
                   </Text>
                 )}
-
                 <Text style={{ marginTop: 2, fontWeight: "700", color: c.text }}>View details →</Text>
               </Pressable>
             ))}
