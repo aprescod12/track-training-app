@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import FormScreen from "../../components/FormScreen";
 import { useAppColors } from "../../lib/theme";
 import { TRAINING_DOMAINS, type TrainingDomain } from "../../lib/trainingDomains";
@@ -11,15 +11,19 @@ const descriptions: Record<TrainingDomain, string> = {
   lift: "Strength training with set-by-set reps and weight.",
 };
 
-function hrefForDomain(domain: TrainingDomain) {
+function hrefForDomain(domain: TrainingDomain, date?: string) {
+  const dateQuery = date ? `&date=${encodeURIComponent(date)}` : "";
   if (domain === "jumps" || domain === "throws") {
-    return `/field-log?domain=${domain}`;
+    return `/field-log?domain=${domain}${dateQuery}`;
   }
-  return `/modal?domain=${domain}`;
+  return `/modal?domain=${domain}${dateQuery}`;
 }
 
 export default function NewWorkoutDomainScreen() {
   const c = useAppColors();
+  const params = useLocalSearchParams<{ date?: string | string[] }>();
+  const rawDate = Array.isArray(params.date) ? params.date[0] : params.date;
+  const date = typeof rawDate === "string" ? rawDate : undefined;
 
   return (
     <FormScreen contentContainerStyle={{ width: "100%", maxWidth: 760, alignSelf: "center" }}>
@@ -34,7 +38,7 @@ export default function NewWorkoutDomainScreen() {
         {TRAINING_DOMAINS.map((domain) => (
           <Pressable
             key={domain.value}
-            onPress={() => router.push(hrefForDomain(domain.value) as any)}
+            onPress={() => router.push(hrefForDomain(domain.value, date) as any)}
             style={{
               borderWidth: 1,
               borderColor: c.border,
