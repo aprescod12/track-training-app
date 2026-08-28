@@ -1,4 +1,9 @@
 import { supabase } from "./supabase";
+import {
+  normalizeTrainingDomain,
+  type FieldEventCode,
+  type TrainingDomain,
+} from "./trainingDomains";
 
 const workflowClient = supabase as any;
 
@@ -20,7 +25,7 @@ export type AthleteAssignment = {
   scheduled_date: string;
   due_at: string | null;
   title_snapshot: string;
-  workout_type_snapshot: "track" | "lift";
+  workout_type_snapshot: TrainingDomain;
   instructions: string | null;
   assignment_status: "scheduled" | "closed" | "cancelled";
   assigned_at: string;
@@ -57,6 +62,10 @@ export type AssignmentEntry = {
   target_weight: number | null;
   recovery_seconds: number | null;
   intensity_text: string | null;
+  event_code: FieldEventCode | null;
+  attempts: number | null;
+  target_mark_m: number | null;
+  implement_weight_kg: number | null;
   notes: string | null;
 };
 
@@ -82,7 +91,7 @@ export type WorkoutTemplate = {
   id: string;
   team_id: string;
   title: string;
-  workout_type: "track" | "lift";
+  workout_type: TrainingDomain;
   description: string | null;
 };
 
@@ -96,6 +105,10 @@ export type WorkoutTemplateEntryDraft = {
   target_weight?: number | null;
   recovery_seconds?: number | null;
   intensity_text?: string | null;
+  event_code?: FieldEventCode | null;
+  attempts?: number | null;
+  target_mark_m?: number | null;
+  implement_weight_kg?: number | null;
   notes?: string | null;
 };
 
@@ -113,7 +126,7 @@ function normalizeAthleteAssignment(row: any): AthleteAssignment {
     scheduled_date: String(row.scheduled_date),
     due_at: row.due_at ?? null,
     title_snapshot: String(row.title_snapshot),
-    workout_type_snapshot: row.workout_type_snapshot === "lift" ? "lift" : "track",
+    workout_type_snapshot: normalizeTrainingDomain(row.workout_type_snapshot),
     instructions: row.instructions ?? null,
     assignment_status: row.assignment_status,
     assigned_at: String(row.assigned_at),
@@ -207,13 +220,20 @@ export async function getAssignmentEntries(assignmentId: string) {
   const { data, error } = await workflowClient
     .from("workout_assignment_entries")
     .select(
-      "id, assignment_id, sort_order, exercise_id, exercise_name_snapshot, label, sets, reps, distance_m, target_time_text, target_weight, recovery_seconds, intensity_text, notes"
+      "id, assignment_id, sort_order, exercise_id, exercise_name_snapshot, label, sets, reps, distance_m, target_time_text, target_weight, recovery_seconds, intensity_text, event_code, attempts, target_mark_m, implement_weight_kg, notes"
     )
     .eq("assignment_id", assignmentId)
     .order("sort_order", { ascending: true });
 
   if (error) throw error;
-  return requireRows<AssignmentEntry>(data);
+  return requireRows<any>(data).map((row) => ({
+    ...row,
+    event_code: row.event_code ?? null,
+    attempts: row.attempts == null ? null : Number(row.attempts),
+    target_mark_m: row.target_mark_m == null ? null : Number(row.target_mark_m),
+    implement_weight_kg:
+      row.implement_weight_kg == null ? null : Number(row.implement_weight_kg),
+  })) as AssignmentEntry[];
 }
 
 export async function submitWorkoutAssignment(params: {
@@ -319,9 +339,7 @@ export async function getCoachAthletes(teamId: string): Promise<CoachAthlete[]> 
     .map((member) => {
       const profile = profileById.get(String(member.user_id));
       const label =
-        profile?.full_name?.trim?.() ||
-        profile?.username?.trim?.() ||
-        "Athlete";
+        profile?.full_name?.trim?.() || profile?.username?.trim?.() || "Athlete";
       return {
         membership_id: String(member.id),
         user_id: String(member.user_id),
@@ -355,14 +373,14 @@ export async function getWorkoutTemplates(teamId: string): Promise<WorkoutTempla
   if (error) throw error;
   return requireRows<any>(data).map((row) => ({
     ...row,
-    workout_type: row.workout_type === "lift" ? "lift" : "track",
+    workout_type: normalizeTrainingDomain(row.workout_type),
   })) as WorkoutTemplate[];
 }
 
 export async function createWorkoutTemplate(params: {
   team: CoachTeam;
   title: string;
-  workoutType: "track" | "lift";
+  workoutType: TrainingDomain;
   description?: string | null;
   entries: WorkoutTemplateEntryDraft[];
 }) {
@@ -398,6 +416,10 @@ export async function createWorkoutTemplate(params: {
     target_weight: entry.target_weight ?? null,
     recovery_seconds: entry.recovery_seconds ?? null,
     intensity_text: entry.intensity_text?.trim() || null,
+    event_code: entry.event_code ?? null,
+    attempts: entry.attempts ?? null,
+    target_mark_m: entry.target_mark_m ?? null,
+    implement_weight_kg: entry.implement_weight_kg ?? null,
     notes: entry.notes?.trim() || null,
   }));
 
