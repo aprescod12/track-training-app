@@ -12,13 +12,14 @@ import {
   type AthleteAssignment,
 } from "../../lib/training";
 import { syncAthleteTrainingNotifications } from "../../lib/trainingNotifications";
+import { TRAINING_DOMAINS, trainingDomainLabel, type TrainingDomain } from "../../lib/trainingDomains";
 
 type Workout = {
   id: string;
   workout_date: string;
   title: string;
   notes: string | null;
-  workout_type: "track" | "lift";
+  workout_type: TrainingDomain;
 };
 
 type EventRow = {
@@ -30,7 +31,9 @@ type EventRow = {
 };
 
 type TrainingMarkerCounts = {
-  track: number;
+  running: number;
+  jumps: number;
+  throws: number;
   lift: number;
   total: number;
 };
@@ -76,6 +79,23 @@ function formatEventTime(timestamp: string) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function emptyTrainingCounts(): TrainingMarkerCounts {
+  return { running: 0, jumps: 0, throws: 0, lift: 0, total: 0 };
+}
+
+function trainingColor(c: ReturnType<typeof useAppColors>, domain: TrainingDomain) {
+  if (domain === "jumps") return c.jumps;
+  if (domain === "throws") return c.throws;
+  if (domain === "lift") return c.lift;
+  return c.running;
+}
+
+function workoutHref(workout: Workout) {
+  return workout.workout_type === "jumps" || workout.workout_type === "throws"
+    ? `/field-workout/${workout.id}`
+    : `/workout/${workout.id}`;
 }
 
 function assignmentStatus(row: AthleteAssignment) {
@@ -124,7 +144,7 @@ export default function CalendarScreen() {
     const map: Record<string, TrainingMarkerCounts> = {};
     for (const workout of monthWorkouts) {
       if (!map[workout.workout_date]) {
-        map[workout.workout_date] = { track: 0, lift: 0, total: 0 };
+        map[workout.workout_date] = emptyTrainingCounts();
       }
       map[workout.workout_date][workout.workout_type] += 1;
       map[workout.workout_date].total += 1;
@@ -145,7 +165,7 @@ export default function CalendarScreen() {
     const map: Record<string, TrainingMarkerCounts> = {};
     for (const assignment of monthAssignments) {
       if (!map[assignment.scheduled_date]) {
-        map[assignment.scheduled_date] = { track: 0, lift: 0, total: 0 };
+        map[assignment.scheduled_date] = emptyTrainingCounts();
       }
       map[assignment.scheduled_date][assignment.workout_type_snapshot] += 1;
       map[assignment.scheduled_date].total += 1;
@@ -368,50 +388,27 @@ export default function CalendarScreen() {
 
                 {hasTrainingMarker && (
                   <View style={{ flexDirection: "row", gap: 3, marginTop: 4 }}>
-                    {(assigned?.track ?? 0) > 0 && (
-                      <View
-                        style={{
-                          width: 7,
-                          height: 7,
-                          borderRadius: 999,
-                          borderWidth: 1.5,
-                          borderColor: c.track,
-                          backgroundColor: c.card,
-                        }}
-                      />
-                    )}
-                    {(assigned?.lift ?? 0) > 0 && (
-                      <View
-                        style={{
-                          width: 7,
-                          height: 7,
-                          borderRadius: 999,
-                          borderWidth: 1.5,
-                          borderColor: c.lift,
-                          backgroundColor: c.card,
-                        }}
-                      />
-                    )}
-                    {(logged?.track ?? 0) > 0 && (
-                      <View
-                        style={{
-                          width: 7,
-                          height: 7,
-                          borderRadius: 999,
-                          backgroundColor: c.track,
-                        }}
-                      />
-                    )}
-                    {(logged?.lift ?? 0) > 0 && (
-                      <View
-                        style={{
-                          width: 7,
-                          height: 7,
-                          borderRadius: 999,
-                          backgroundColor: c.lift,
-                        }}
-                      />
-                    )}
+                    {TRAINING_DOMAINS.map((domain) => {
+                      const loggedCount = logged?.[domain.value] ?? 0;
+                      const assignedCount = assigned?.[domain.value] ?? 0;
+                      if (loggedCount === 0 && assignedCount === 0) return null;
+                      const loggedMarker = loggedCount > 0;
+                      return (
+                        <View
+                          key={domain.value}
+                          style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: 999,
+                            borderWidth: loggedMarker ? 0 : 1.5,
+                            borderColor: trainingColor(c, domain.value),
+                            backgroundColor: loggedMarker
+                              ? trainingColor(c, domain.value)
+                              : c.card,
+                          }}
+                        />
+                      );
+                    })}
                   </View>
                 )}
               </Pressable>
@@ -421,48 +418,26 @@ export default function CalendarScreen() {
 
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-            <View
-              style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: c.event }}
-            />
+            <View style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: c.event }} />
             <Text style={{ color: c.subtext }}>event</Text>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-            <View
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: 999,
-                borderWidth: 1.5,
-                borderColor: c.track,
-              }}
-            />
-            <Text style={{ color: c.subtext }}>track assigned</Text>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-            <View
-              style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: c.track }}
-            />
-            <Text style={{ color: c.subtext }}>track logged</Text>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-            <View
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: 999,
-                borderWidth: 1.5,
-                borderColor: c.lift,
-              }}
-            />
-            <Text style={{ color: c.subtext }}>lift assigned</Text>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-            <View
-              style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: c.lift }}
-            />
-            <Text style={{ color: c.subtext }}>lift logged</Text>
-          </View>
-        </View>
+          {TRAINING_DOMAINS.map((domain) => (
+            <View key={domain.value} style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <View
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 999,
+                  backgroundColor: trainingColor(c, domain.value),
+                }}
+              />
+              <Text style={{ color: c.subtext }}>{domain.label.toLowerCase()}</Text>
+            </View>
+          ))}
+          <Text style={{ color: c.subtext, fontSize: 12 }}>
+            Outline = assigned · filled = logged
+          </Text>
+        </View>        </View>
       </View>
 
       <View
@@ -509,7 +484,7 @@ export default function CalendarScreen() {
                       borderRadius: 999,
                       borderWidth: 1.5,
                       borderColor:
-                        assignment.workout_type_snapshot === "lift" ? c.lift : c.track,
+                        trainingColor(c, assignment.workout_type_snapshot),
                     }}
                   />
                   <Text style={{ fontWeight: "800", color: c.text, flex: 1 }}>
@@ -581,7 +556,7 @@ export default function CalendarScreen() {
             {selectedDayWorkouts.map((workout) => (
               <Pressable
                 key={workout.id}
-                onPress={() => router.push(`/workout/${workout.id}`)}
+                onPress={() => router.push(workoutHref(workout) as any)}
                 style={{
                   borderWidth: 1,
                   borderColor: c.border,
@@ -597,13 +572,16 @@ export default function CalendarScreen() {
                       width: 8,
                       height: 8,
                       borderRadius: 999,
-                      backgroundColor: workout.workout_type === "lift" ? c.lift : c.track,
+                      backgroundColor: trainingColor(c, workout.workout_type),
                     }}
                   />
                   <Text style={{ fontWeight: "800", color: c.text, flex: 1 }}>
                     {workout.title}
                   </Text>
                 </View>
+                <Text style={{ color: c.subtext, fontSize: 12, fontWeight: "700" }}>
+                  {trainingDomainLabel(workout.workout_type)}
+                </Text>
                 {!!workout.notes && (
                   <Text numberOfLines={2} style={{ color: c.subtext }}>
                     {workout.notes}

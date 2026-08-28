@@ -6,6 +6,8 @@ import PrimaryButton from "../components/PrimaryButton";
 import { formatYMD } from "../lib/date";
 import { supabase } from "../lib/supabase";
 import { useAppColors } from "../lib/theme";
+
+const fieldClient = supabase as any;
 import {
   JUMP_EVENTS,
   THROW_EVENTS,
@@ -105,7 +107,9 @@ export default function FieldLogScreen() {
       return;
     }
 
-    const cleanedAttempts = attempts.map((attempt, index) => {
+    let cleanedAttempts;
+    try {
+      cleanedAttempts = attempts.map((attempt, index) => {
       const mark = parsePositiveNumber(attempt.mark);
       const requiresMark =
         vertical || attempt.outcome === "valid" || attempt.outcome === "clear" || attempt.outcome === "miss" || attempt.outcome === "pass";
@@ -124,7 +128,11 @@ export default function FieldLogScreen() {
         outcome: attempt.outcome,
         notes: attempt.notes.trim() || null,
       };
-    });
+      });
+    } catch (validationError: any) {
+      setError(validationError?.message ?? String(validationError));
+      return;
+    }
 
     if (!cleanedAttempts.length) {
       setError("Add at least one attempt.");
@@ -139,7 +147,7 @@ export default function FieldLogScreen() {
       if (!uid) throw new Error("Please sign in to log training.");
 
       let priorBest: number | null = null;
-      let bestQuery = supabase
+      let bestQuery = fieldClient
         .from("field_event_bests_v")
         .select("best_mark_m")
         .eq("user_id", uid)
@@ -198,7 +206,7 @@ export default function FieldLogScreen() {
         throw entryError ?? new Error("Could not create the field-event entry.");
       }
 
-      const { error: attemptsError } = await supabase.from("field_attempts").insert(
+      const { error: attemptsError } = await fieldClient.from("field_attempts").insert(
         cleanedAttempts.map((attempt) => ({ ...attempt, entry_id: entry.id }))
       );
 
@@ -308,7 +316,7 @@ export default function FieldLogScreen() {
               style={inputStyle}
             />
             <Text style={{ color: c.subtext, fontSize: 12 }}>
-              Start a separate workout entry when changing implement weight so marks stay comparable.
+              Start a separate log when changing implement weight so marks stay comparable.
             </Text>
           </View>
         )}
