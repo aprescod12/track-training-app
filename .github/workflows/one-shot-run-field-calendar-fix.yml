@@ -1,0 +1,33 @@
+name: One-shot run field calendar fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-shot-run-field-calendar-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply repair
+        run: python3 scripts/one-shot-field-calendar-fix.py
+      - name: Verify repair
+        run: |
+          grep -q 'const fieldClient = supabase as any' app/field-log.tsx
+          grep -q 'select plan(32);' supabase/tests/database/field_event_training_domains.test.sql
+          grep -q 'jumps: number;' 'app/(tabs)/calendar.tsx'
+      - name: Commit repair and cleanup
+        run: |
+          git config user.name "Amiri Prescod"
+          git config user.email "presso1717@gmail.com"
+          git rm scripts/one-shot-field-calendar-fix.py .github/workflows/one-shot-run-field-calendar-fix.yml
+          git add app/field-log.tsx 'app/(tabs)/calendar.tsx' supabase/tests/database/field_event_training_domains.test.sql
+          git commit -m "fix(field): complete domain-aware logging surfaces"
+          git push origin HEAD:main
