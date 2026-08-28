@@ -30,7 +30,7 @@ export const JUMP_EVENTS: { value: JumpEventCode; label: string; vertical: boole
 export const THROW_EVENTS: { value: ThrowEventCode; label: string }[] = [
   { value: "shot_put", label: "Shot Put" },
   { value: "discus", label: "Discus" },
-  { value: "hammer", label: "Hammer", },
+  { value: "hammer", label: "Hammer" },
   { value: "javelin", label: "Javelin" },
 ];
 
