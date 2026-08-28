@@ -1,12 +1,16 @@
 import { AppError } from "./errors";
 import { supabase } from "./supabase";
+import {
+  normalizeTrainingDomain,
+  type TrainingDomain,
+} from "./trainingDomains";
 
 const db = supabase as any;
 
 export type TeamMemberType = "athlete" | "coach" | "staff";
 export type TeamManagementRole = "member" | "admin" | "owner";
 export type TeamVisibility = "public" | "unlisted" | "private";
-export type TrainingWorkoutType = "track" | "lift";
+export type TrainingWorkoutType = TrainingDomain;
 
 export type MyTeam = {
   membership_id: string;
@@ -373,9 +377,7 @@ export async function getTeamWorkspace(teamId: string): Promise<TeamWorkspace> {
       : Promise.resolve({ data: [], error: null }),
     db
       .from("coach_athlete_assignments")
-      .select(
-        "id, team_id, coach_membership_id, athlete_membership_id, is_primary, active"
-      )
+      .select("id, team_id, coach_membership_id, athlete_membership_id, is_primary, active")
       .eq("team_id", teamId)
       .eq("active", true),
     db
@@ -417,7 +419,7 @@ export async function getTeamWorkspace(teamId: string): Promise<TeamWorkspace> {
     coachTrainingPermissions: (permissionsRes.data ?? []).map((row: any) => ({
       team_id: row.team_id,
       coach_membership_id: row.coach_membership_id,
-      workout_type: row.workout_type === "lift" ? "lift" : "track",
+      workout_type: normalizeTrainingDomain(row.workout_type),
       can_prescribe: !!row.can_prescribe,
       can_review: !!row.can_review,
     })) as CoachTrainingPermission[],
@@ -543,7 +545,7 @@ export async function getMyCoachTrainingPermissions(
   return (data ?? []).map((row: any) => ({
     team_id: row.team_id,
     coach_membership_id: row.coach_membership_id,
-    workout_type: row.workout_type === "lift" ? "lift" : "track",
+    workout_type: normalizeTrainingDomain(row.workout_type),
     can_prescribe: !!row.can_prescribe,
     can_review: !!row.can_review,
   })) as CoachTrainingPermission[];
