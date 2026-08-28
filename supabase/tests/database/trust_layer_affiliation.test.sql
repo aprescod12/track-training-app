@@ -98,7 +98,7 @@ select lives_ok(
     values (
       current_date,
       'Affiliation Trust Boundary Workout',
-      'track',
+      'running',
       'a6000000-0000-4000-8000-000000000006'::uuid,
       current_setting('test.affiliation_team_id')::uuid
     )

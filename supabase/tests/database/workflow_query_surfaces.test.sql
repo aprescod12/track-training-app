@@ -81,13 +81,13 @@ set can_prescribe = true,
     granted_by = 'c1000000-0000-4000-8000-000000000001'::uuid
 where team_id = current_setting('test.query_team_id')::uuid
   and coach_membership_id = current_setting('test.query_coach_id')::uuid
-  and workout_type = 'track';
+  and workout_type = 'running';
 
 set local request.jwt.claim.sub = 'c2000000-0000-4000-8000-000000000002';
 select lives_ok(
   $$
     insert into public.workout_templates (team_id, created_by_membership_id, title, workout_type)
-    values (current_setting('test.query_team_id')::uuid, current_setting('test.query_coach_id')::uuid, 'Query Template', 'track')
+    values (current_setting('test.query_team_id')::uuid, current_setting('test.query_coach_id')::uuid, 'Query Template', 'running')
   $$,
   'coach can create query source template'
 );

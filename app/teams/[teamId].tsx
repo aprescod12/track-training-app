@@ -28,7 +28,9 @@ const memberTypeOptions: { value: TeamMemberType; label: string }[] = [
 ];
 
 const trainingScopes: { value: TrainingWorkoutType; label: string }[] = [
-  { value: "track", label: "Track" },
+  { value: "running", label: "Running" },
+  { value: "jumps", label: "Jumps" },
+  { value: "throws", label: "Throws" },
   { value: "lift", label: "Lift" },
 ];
 
@@ -431,7 +433,7 @@ export default function TeamDetailScreen() {
                 Coach responsibilities
               </Text>
               <Text style={{ color: c.subtext }}>
-                Training authority controls which domains a coach may prescribe and formally review. Explicitly assigned coaches can still view both Track and Lift context for their athletes.
+                Training authority controls which domains a coach may prescribe and formally review. Explicitly assigned coaches can still view all team-context training domains for their athletes.
               </Text>
               {coaches.map((coach) => {
                 const coachGroups = workspace.groups.filter((group) =>
@@ -539,7 +541,7 @@ export default function TeamDetailScreen() {
                 Athlete visibility
               </Text>
               <Text style={{ color: c.subtext }}>
-                Explicitly choose which athletes each coach may see. This is independent from groups and training authority. Once assigned, the coach may view that athlete’s team-context Track and Lift data, but may only prescribe or formally review enabled domains.
+                Explicitly choose which athletes each coach may see. This is independent from groups and training authority. Once assigned, the coach may view that athlete’s team-context Running, Jumps, Throws, and Lift data, but may only prescribe or formally review enabled domains.
               </Text>
               {athletes.map((athlete) => (
                 <View

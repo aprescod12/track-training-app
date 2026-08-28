@@ -97,7 +97,7 @@ set can_prescribe = true,
     granted_by = '91000000-0000-4000-8000-000000000001'::uuid
 where team_id = current_setting('test.template_team_id')::uuid
   and coach_membership_id = current_setting('test.template_coach_membership_id')::uuid
-  and workout_type = 'track';
+  and workout_type = 'running';
 
 set local request.jwt.claim.sub = '92000000-0000-4000-8000-000000000002';
 
@@ -113,7 +113,7 @@ select lives_ok(
       current_setting('test.template_team_id')::uuid,
       current_setting('test.template_coach_membership_id')::uuid,
       'Acceleration Monday',
-      'track',
+      'running',
       'Reusable acceleration session'
     )
   $$,
@@ -258,7 +258,7 @@ select throws_ok(
       current_setting('test.template_team_id')::uuid,
       current_setting('test.template_owner_membership_id')::uuid,
       'Athlete Bypass Template',
-      'track'
+      'running'
     )
   $$,
   '42501',
@@ -422,7 +422,7 @@ select lives_ok(
     values (
       current_date,
       'Existing Personal Logging Still Works',
-      'track',
+      'running',
       '93000000-0000-4000-8000-000000000003'::uuid,
       null
     )

@@ -104,7 +104,7 @@ select lives_ok(
     values (
       current_date,
       'Private Rehab Session',
-      'track',
+      'running',
       '30000000-0000-4000-8000-000000000003'::uuid
     )
   $$,
@@ -117,7 +117,7 @@ select lives_ok(
     values (
       current_date,
       'Team Speed Session',
-      'track',
+      'running',
       '30000000-0000-4000-8000-000000000003'::uuid,
       current_setting('test.coach_access_team_id')::uuid
     )
@@ -345,7 +345,7 @@ select throws_ok(
     values (
       current_date,
       'Outsider Fake Team Workout',
-      'track',
+      'running',
       '70000000-0000-4000-8000-000000000007'::uuid,
       current_setting('test.coach_access_team_id')::uuid
     )
@@ -361,7 +361,7 @@ select lives_ok(
     values (
       current_date,
       'Outsider Personal Workout',
-      'track',
+      'running',
       '70000000-0000-4000-8000-000000000007'::uuid
     )
   $$,

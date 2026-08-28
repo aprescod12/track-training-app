@@ -25,6 +25,7 @@ import {
   getPersonalWorkoutCandidates,
   type PersonalWorkoutCandidate,
 } from "../../../lib/assignmentAttachment";
+import { trainingDomainLabel } from "../../../lib/trainingDomains";
 
 function outcomeLabel(status: string | null) {
   switch (status) {
@@ -52,6 +53,9 @@ function prescriptionLine(entry: AssignmentEntry) {
   if (entry.target_weight !== null) parts.push(`target ${entry.target_weight}`);
   if (entry.recovery_seconds !== null) parts.push(`${entry.recovery_seconds}s recovery`);
   if (entry.intensity_text) parts.push(entry.intensity_text);
+  if (entry.attempts) parts.push(`${entry.attempts} attempts`);
+  if (entry.target_mark_m !== null) parts.push(`target ${entry.target_mark_m}m`);
+  if (entry.implement_weight_kg !== null) parts.push(`${entry.implement_weight_kg}kg implement`);
   return parts.join(" · ");
 }
 
@@ -91,7 +95,7 @@ export default function TeamTrainingAssignmentScreen() {
           getPersonalWorkoutCandidates(own.scheduled_date),
         ]);
         setEntries(assignmentEntries);
-        setPersonalWorkouts(candidates);
+        setPersonalWorkouts(candidates.filter((candidate) => candidate.workout_type === own.workout_type_snapshot));
       } else {
         const coach = await getCoachAssignment(id);
         setCoachRow(coach);
@@ -246,7 +250,7 @@ export default function TeamTrainingAssignmentScreen() {
           {row.title_snapshot}
         </Text>
         <Text style={{ color: c.subtext }}>
-          {row.team_name ?? "Team"} · {row.scheduled_date} · {row.workout_type_snapshot === "lift" ? "Lift" : "Track"}
+          {row.team_name ?? "Team"} · {row.scheduled_date} · {trainingDomainLabel(row.workout_type_snapshot)}
         </Text>
         {coachRow && (
           <Text style={{ color: c.text, fontWeight: "700" }}>
@@ -305,7 +309,13 @@ export default function TeamTrainingAssignmentScreen() {
 
               <PrimaryButton
                 title="Log a workout for this assignment date"
-                onPress={() => router.push(`/modal?date=${athleteRow.scheduled_date}`)}
+                onPress={() =>
+        router.push(
+          athleteRow.workout_type_snapshot === "jumps" || athleteRow.workout_type_snapshot === "throws"
+            ? (`/field-log?date=${athleteRow.scheduled_date}&domain=${athleteRow.workout_type_snapshot}` as any)
+            : (`/modal?date=${athleteRow.scheduled_date}&domain=${athleteRow.workout_type_snapshot}` as any)
+        )
+      }
                 disabled={saving}
               />
 
@@ -319,7 +329,7 @@ export default function TeamTrainingAssignmentScreen() {
                   {personalWorkouts.map((workout) => (
                     <View key={workout.id} style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, borderRadius: 12, padding: 10, gap: 7 }}>
                       <Text style={{ fontWeight: "800", color: c.text }}>{workout.title}</Text>
-                      <Text style={{ color: c.subtext }}>{workout.workout_type === "lift" ? "Lift" : "Track"} · currently personal</Text>
+                      <Text style={{ color: c.subtext }}>{trainingDomainLabel(workout.workout_type)} · currently personal</Text>
                       <PrimaryButton title="Attach as completed" onPress={() => attachPerformance(workout.id, "completed")} disabled={saving} />
                       <PrimaryButton title="Attach as partially completed" onPress={() => attachPerformance(workout.id, "partially_completed")} disabled={saving} />
                       <PrimaryButton title="Attach as modified" onPress={() => attachPerformance(workout.id, "modified")} disabled={saving} />
@@ -348,7 +358,7 @@ export default function TeamTrainingAssignmentScreen() {
             </>
           )}
           {athleteRow.workout_id && (
-            <PrimaryButton title="View linked workout" onPress={() => router.push(`/workout/${athleteRow.workout_id}`)} />
+            <PrimaryButton title="View linked workout" onPress={() => router.push((athleteRow.workout_type_snapshot === "jumps" || athleteRow.workout_type_snapshot === "throws" ? `/field-workout/${athleteRow.workout_id}` : `/workout/${athleteRow.workout_id}`) as any)} />
           )}
         </View>
       )}
@@ -363,7 +373,7 @@ export default function TeamTrainingAssignmentScreen() {
               <Text style={{ color: c.text }}>Outcome: {outcomeLabel(coachRow.completion_status)}</Text>
               {coachRow.athlete_note && <Text style={{ color: c.text }}>Athlete note: {coachRow.athlete_note}</Text>}
               {coachRow.workout_id && (
-                <PrimaryButton title="View athlete performance" onPress={() => router.push(`/workout/${coachRow.workout_id}`)} />
+                <PrimaryButton title="View athlete performance" onPress={() => router.push((coachRow.workout_type_snapshot === "jumps" || coachRow.workout_type_snapshot === "throws" ? `/field-workout/${coachRow.workout_id}` : `/workout/${coachRow.workout_id}`) as any)} />
               )}
               {coachCanReview ? (
                 <>
@@ -381,7 +391,7 @@ export default function TeamTrainingAssignmentScreen() {
                 <View style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, borderRadius: 12, padding: 12, gap: 4 }}>
                   <Text style={{ color: c.text, fontWeight: "800" }}>View only</Text>
                   <Text style={{ color: c.subtext }}>
-                    You are assigned to this athlete, so you can see this {coachRow.workout_type_snapshot === "lift" ? "Lift" : "Track"} context. Your team role does not include formal review authority for this training domain.
+                    You are assigned to this athlete, so you can see this {trainingDomainLabel(coachRow.workout_type_snapshot)} context. Your team role does not include formal review authority for this training domain.
                   </Text>
                 </View>
               )}

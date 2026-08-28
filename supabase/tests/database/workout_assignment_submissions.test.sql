@@ -84,7 +84,7 @@ set can_prescribe = true,
     granted_by = 'b1000000-0000-4000-8000-000000000001'::uuid
 where team_id = current_setting('test.submission_team_id')::uuid
   and coach_membership_id = current_setting('test.submission_coach_id')::uuid
-  and workout_type = 'track';
+  and workout_type = 'running';
 
 set local request.jwt.claim.sub = 'b2000000-0000-4000-8000-000000000002';
 
@@ -95,7 +95,7 @@ select lives_ok(
       current_setting('test.submission_team_id')::uuid,
       current_setting('test.submission_coach_id')::uuid,
       'Submission Test Template',
-      'track'
+      'running'
     )
   $$,
   'coach can create submission source template'
@@ -167,7 +167,7 @@ set local request.jwt.claim.sub = 'b3000000-0000-4000-8000-000000000003';
 select lives_ok(
   $$
     insert into public.workouts (workout_date, title, workout_type, user_id, team_id)
-    values (current_date + 1, 'Athlete A Personal Workout', 'track', 'b3000000-0000-4000-8000-000000000003', null)
+    values (current_date + 1, 'Athlete A Personal Workout', 'running', 'b3000000-0000-4000-8000-000000000003', null)
   $$,
   'athlete A can still create unrelated personal workout'
 );
@@ -186,7 +186,7 @@ $$;
 select lives_ok(
   $$
     insert into public.workouts (workout_date, title, workout_type, user_id, team_id)
-    values (current_date + 1, 'Athlete A Team Performance', 'track', 'b3000000-0000-4000-8000-000000000003', current_setting('test.submission_team_id')::uuid)
+    values (current_date + 1, 'Athlete A Team Performance', 'running', 'b3000000-0000-4000-8000-000000000003', current_setting('test.submission_team_id')::uuid)
   $$,
   'athlete A can create team-context performance for assignment'
 );
@@ -207,7 +207,7 @@ set local request.jwt.claim.sub = 'b4000000-0000-4000-8000-000000000004';
 select lives_ok(
   $$
     insert into public.workouts (workout_date, title, workout_type, user_id, team_id)
-    values (current_date + 2, 'Athlete B Team Performance', 'track', 'b4000000-0000-4000-8000-000000000004', current_setting('test.submission_team_id')::uuid)
+    values (current_date + 2, 'Athlete B Team Performance', 'running', 'b4000000-0000-4000-8000-000000000004', current_setting('test.submission_team_id')::uuid)
   $$,
   'athlete B can create own team-context workout'
 );

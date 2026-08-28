@@ -196,7 +196,7 @@ select lives_ok(
       (
         current_date,
         'Scope Athlete Track Performance',
-        'track',
+        'running',
         'e3000000-0000-4000-8000-000000000003'::uuid,
         current_setting('test.scope_team_id')::uuid
       ),
@@ -258,7 +258,7 @@ select lives_ok(
         granted_by = 'e1000000-0000-4000-8000-000000000001'::uuid
     where team_id = current_setting('test.scope_team_id')::uuid
       and coach_membership_id = current_setting('test.scope_coach_membership_id')::uuid
-      and workout_type = 'track'
+      and workout_type = 'running'
   $$,
   'manager grants Track authority to the sprint coach'
 );
@@ -269,7 +269,7 @@ select results_eq(
     from public.coach_training_permissions
     where team_id = current_setting('test.scope_team_id')::uuid
       and coach_membership_id = current_setting('test.scope_coach_membership_id')::uuid
-      and workout_type = 'track'
+      and workout_type = 'running'
       and can_prescribe
       and can_review
   $$,
@@ -312,7 +312,7 @@ select lives_ok(
       current_setting('test.scope_team_id')::uuid,
       current_setting('test.scope_coach_membership_id')::uuid,
       'Sprint Coach Track Template',
-      'track'
+      'running'
     )
   $$,
   'Track-authorized coach can create Track prescription template'
@@ -453,7 +453,7 @@ begin
       from public.workout_assignment_recipients war
       join public.workout_assignments wa on wa.id = war.assignment_id
       where war.athlete_membership_id = current_setting('test.scope_athlete_membership_id')::uuid
-        and wa.workout_type_snapshot = 'track'
+        and wa.workout_type_snapshot = 'running'
         and wa.scheduled_date = current_date + 1
     ),
     true

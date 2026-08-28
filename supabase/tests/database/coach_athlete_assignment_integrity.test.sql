@@ -268,7 +268,7 @@ select lives_ok(
     values (
       current_date,
       'Membership Revocation Team Workout',
-      'track',
+      'running',
       '84000000-0000-4000-8000-000000000004'::uuid,
       current_setting('test.assignment_integrity_team_id')::uuid
     )

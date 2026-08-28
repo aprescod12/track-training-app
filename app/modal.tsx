@@ -37,7 +37,7 @@ type EntryDraft = {
   selectedExerciseId?: string | null;
   pendingCustomExercise?: {
     name: string;
-    category: "track" | "lift" | "other";
+    category: "running" | "lift" | "other";
     score_type: "max_weight" | "min_time" | "max_reps";
   } | null;
 
@@ -45,7 +45,7 @@ type EntryDraft = {
   sets: string;
   notes: string;
 
-  // track
+  // running
   reps: string;
   set_times: string[][];
   activeSet: number;
@@ -55,7 +55,7 @@ type EntryDraft = {
   lift_reps: string[];
   lift_weights: string[];
 
-  // optional track-only weight (sled/medball/etc.)
+  // optional running-only weight (sled/medball/etc.)
   weight: string;
 };
 
@@ -68,7 +68,7 @@ type ExerciseSearchResult = {
   created_by: string | null;
 };
 
-function buildEntrySetsFromTrack(entryId: string, setTimes: string[][] | null) {
+function buildEntrySetsFromRunning(entryId: string, setTimes: string[][] | null) {
   if (!setTimes || !Array.isArray(setTimes)) return [];
 
   const rows: any[] = [];
@@ -170,7 +170,7 @@ export default function ModalScreen() {
     color: c.text,
   } as const;
 
-  const params = useLocalSearchParams<{ date?: string }>();
+  const params = useLocalSearchParams<{ date?: string; domain?: string }>();
 
   const [date] = useState(() =>
     typeof params.date === "string" ? params.date : formatYMD(new Date())
@@ -178,7 +178,8 @@ export default function ModalScreen() {
 
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
-  const [workoutType, setWorkoutType] = useState<"track" | "lift">("track");
+  const requestedDomain = params.domain === "lift" ? "lift" : "running";
+  const [workoutType, setWorkoutType] = useState<"running" | "lift">(requestedDomain);
   const isLift = workoutType === "lift";
 
   const [entries, setEntries] = useState<EntryDraft[]>([makeBlankEntry()]);
@@ -332,7 +333,7 @@ export default function ModalScreen() {
     });
   }
 
-  function updateTrackSetsOrReps(index: number, key: "sets" | "reps", value: string) {
+  function updateRunningSetsOrReps(index: number, key: "sets" | "reps", value: string) {
     setEntries((prev) => {
       const copy = [...prev];
       const cur = copy[index];
@@ -405,7 +406,7 @@ export default function ModalScreen() {
     const name = entries[index].exercise.trim();
     if (!name) return;
   
-    const category = workoutType === "lift" ? "lift" : "track";
+    const category = workoutType === "lift" ? "lift" : "running";
     const score_type = workoutType === "lift" ? "max_weight" : "min_time";
   
     updateEntryField(index, {
@@ -536,7 +537,7 @@ export default function ModalScreen() {
           if (workoutType === "lift") {
             allSetRows.push(...buildEntrySetsFromLift(row.id, row.lift_reps, row.lift_weights));
           } else {
-            allSetRows.push(...buildEntrySetsFromTrack(row.id, row.set_times));
+            allSetRows.push(...buildEntrySetsFromRunning(row.id, row.set_times));
           }
         }
 
@@ -608,7 +609,7 @@ export default function ModalScreen() {
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
   <View style={{ flex: 1, gap: 4 }}>
     <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>
-      {isLift ? "Log Lift" : "Log Track"}
+      {isLift ? "Log Lift" : "Log Running"}
     </Text>
     <Text style={{ color: c.subtext }}>
       Add your workout details, entries, and notes for {date}.
@@ -644,7 +645,7 @@ export default function ModalScreen() {
 
           <View style={{ flexDirection: "row", gap: 10 }}>
             <Pressable
-              onPress={() => setWorkoutType("track")}
+              onPress={() => setWorkoutType("running")}
               style={{
                 flex: 1,
                 borderWidth: 1,
@@ -652,11 +653,11 @@ export default function ModalScreen() {
                 borderRadius: 999,
                 paddingVertical: 10,
                 alignItems: "center",
-                backgroundColor: workoutType === "track" ? c.primary : c.bg,
+                backgroundColor: workoutType === "running" ? c.primary : c.bg,
               }}
             >
-              <Text style={{ fontWeight: "700", color: workoutType === "track" ? c.primaryText : c.text }}>
-                Track
+              <Text style={{ fontWeight: "700", color: workoutType === "running" ? c.primaryText : c.text }}>
+                Running
               </Text>
             </Pressable>
 
@@ -842,7 +843,7 @@ export default function ModalScreen() {
                 value={entry.sets}
                 onChangeText={(v) => {
                   if (isLift) updateLiftSets(index, v);
-                  else updateTrackSetsOrReps(index, "sets", v);
+                  else updateRunningSetsOrReps(index, "sets", v);
                 }}
                 placeholder="Sets"
                 keyboardType="numeric"
@@ -906,7 +907,7 @@ export default function ModalScreen() {
                   <Text style={{ fontWeight: "700", color: c.text }}>Reps</Text>
                   <TextInput
                     value={entry.reps}
-                    onChangeText={(v) => updateTrackSetsOrReps(index, "reps", v)}
+                    onChangeText={(v) => updateRunningSetsOrReps(index, "reps", v)}
                     placeholder="Reps"
                     keyboardType="numeric"
                     placeholderTextColor={placeholderColor}

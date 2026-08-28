@@ -53,7 +53,7 @@ select lives_ok(
     values (
       current_date,
       'Trust Boundary Team Workout',
-      'track',
+      'running',
       '92000000-0000-4000-8000-000000000002'::uuid,
       current_setting('test.trust_team_id')::uuid
     )

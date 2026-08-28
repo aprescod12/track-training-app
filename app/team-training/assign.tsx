@@ -21,6 +21,7 @@ import {
   coachHasTrainingPermission,
   getMyCoachTrainingPermissions,
 } from "../../lib/teams";
+import { trainingDomainLabel } from "../../lib/trainingDomains";
 
 type TargetMode = "athletes" | "group" | "team";
 
@@ -160,7 +161,7 @@ export default function AssignWorkoutScreen() {
       <View style={{ gap: 4 }}>
         <Text style={{ fontSize: 22, fontWeight: "800", color: c.text }}>Assign workout</Text>
         <Text style={{ color: c.subtext }}>
-          Assign only within your Track/Lift authority and only to athletes explicitly assigned to you.
+          Assign only within your Running/Jumps/Throws/Lift authority and only to athletes explicitly assigned to you.
         </Text>
       </View>
 
@@ -193,7 +194,7 @@ export default function AssignWorkoutScreen() {
               templates.map((template) => (
                 <Pressable key={template.id} onPress={() => setTemplateId(template.id)} style={{ borderWidth: 1, borderColor: c.border, borderRadius: 12, padding: 10, backgroundColor: templateId === template.id ? c.primary : c.bg }}>
                   <Text style={{ color: templateId === template.id ? c.primaryText : c.text, fontWeight: "700" }}>{template.title}</Text>
-                  <Text style={{ color: templateId === template.id ? c.primaryText : c.subtext }}>{template.workout_type === "lift" ? "Lift" : "Track"}</Text>
+                  <Text style={{ color: templateId === template.id ? c.primaryText : c.subtext }}>{trainingDomainLabel(template.workout_type)}</Text>
                 </Pressable>
               ))
             )}

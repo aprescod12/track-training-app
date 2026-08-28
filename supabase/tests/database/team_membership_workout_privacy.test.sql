@@ -52,7 +52,7 @@ select lives_ok(
     values (
       current_date,
       'Athlete Personal Session',
-      'track',
+      'running',
       'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'::uuid
     )
   $$,

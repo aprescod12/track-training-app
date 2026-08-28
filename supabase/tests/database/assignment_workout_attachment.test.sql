@@ -61,11 +61,11 @@ set can_prescribe = true,
     granted_by = 'd1000000-0000-4000-8000-000000000001'::uuid
 where team_id = current_setting('test.attach_team_id')::uuid
   and coach_membership_id = current_setting('test.attach_coach_id')::uuid
-  and workout_type = 'track';
+  and workout_type = 'running';
 
 set local request.jwt.claim.sub = 'd2000000-0000-4000-8000-000000000002';
 select lives_ok(
-  $$insert into public.workout_templates(team_id,created_by_membership_id,title,workout_type) values(current_setting('test.attach_team_id')::uuid,current_setting('test.attach_coach_id')::uuid,'Attachment Template','track')$$,
+  $$insert into public.workout_templates(team_id,created_by_membership_id,title,workout_type) values(current_setting('test.attach_team_id')::uuid,current_setting('test.attach_coach_id')::uuid,'Attachment Template','running')$$,
   'coach creates attachment template'
 );
 do $$
@@ -100,11 +100,11 @@ $$;
 
 set local request.jwt.claim.sub = 'd3000000-0000-4000-8000-000000000003';
 select lives_ok(
-  $$insert into public.workouts(workout_date,title,workout_type,user_id,team_id) values(current_date+1,'Personal Attachment Candidate','track','d3000000-0000-4000-8000-000000000003',null)$$,
+  $$insert into public.workouts(workout_date,title,workout_type,user_id,team_id) values(current_date+1,'Personal Attachment Candidate','running','d3000000-0000-4000-8000-000000000003',null)$$,
   'athlete A logs ordinary personal workout first'
 );
 select lives_ok(
-  $$insert into public.workouts(workout_date,title,workout_type,user_id,team_id) values(current_date+2,'Wrong Date Candidate','track','d3000000-0000-4000-8000-000000000003',null)$$,
+  $$insert into public.workouts(workout_date,title,workout_type,user_id,team_id) values(current_date+2,'Wrong Date Candidate','running','d3000000-0000-4000-8000-000000000003',null)$$,
   'athlete A can have unrelated personal workout on another date'
 );
 do $$

@@ -134,7 +134,7 @@ set can_prescribe = true,
     granted_by = 'a1000000-0000-4000-8000-000000000001'::uuid
 where team_id = current_setting('test.assignment_team_id')::uuid
   and coach_membership_id = current_setting('test.assignment_coach_id')::uuid
-  and workout_type = 'track';
+  and workout_type = 'running';
 
 set local request.jwt.claim.sub = 'a2000000-0000-4000-8000-000000000002';
 
@@ -145,7 +145,7 @@ select lives_ok(
       current_setting('test.assignment_team_id')::uuid,
       current_setting('test.assignment_coach_id')::uuid,
       'D2 Acceleration Template',
-      'track',
+      'running',
       'Template used to prove immutable assignment snapshots'
     )
   $$,
