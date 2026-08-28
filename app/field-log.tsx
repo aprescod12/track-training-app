@@ -155,7 +155,7 @@ export default function FieldLogScreen() {
 
       bestQuery =
         domain === "throws"
-          ? bestQuery.eq("implement_weight_kg", implementWeightKg)
+          ? bestQuery.eq("implement_weight_kg", implementWeightKg!)
           : bestQuery.is("implement_weight_kg", null);
 
       const { data: priorBestRow } = await bestQuery.maybeSingle();
