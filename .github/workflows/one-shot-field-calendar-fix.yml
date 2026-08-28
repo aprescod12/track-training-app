@@ -1,0 +1,228 @@
+name: One-shot field calendar integration fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-shot-field-calendar-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fix field client and calendar domains
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # New schema relations are intentionally accessed through the existing
+          # untyped bridge until generated Supabase types are refreshed.
+          field = Path("app/field-log.tsx")
+          text = field.read_text()
+          marker = 'import { useAppColors } from "../lib/theme";\n'
+          if marker not in text:
+              raise SystemExit("field logger import marker missing")
+          text = text.replace(marker, marker + '\nconst fieldClient = supabase as any;\n', 1)
+          text = text.replace('      let bestQuery = supabase\n        .from("field_event_bests_v")', '      let bestQuery = fieldClient\n        .from("field_event_bests_v")', 1)
+          text = text.replace('      const { error: attemptsError } = await supabase.from("field_attempts").insert(', '      const { error: attemptsError } = await fieldClient.from("field_attempts").insert(', 1)
+
+          # Validation should report inline rather than throw outside the save try/catch.
+          old = '    const cleanedAttempts = attempts.map((attempt, index) => {'
+          if old not in text:
+              raise SystemExit("field attempt validation marker missing")
+          text = text.replace(old, '    let cleanedAttempts;\n    try {\n      cleanedAttempts = attempts.map((attempt, index) => {', 1)
+          old = '    });\n\n    if (!cleanedAttempts.length) {'
+          new = '      });\n    } catch (validationError: any) {\n      setError(validationError?.message ?? String(validationError));\n      return;\n    }\n\n    if (!cleanedAttempts.length) {'
+          if old not in text:
+              raise SystemExit("field attempt validation close marker missing")
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              "Start a separate workout entry when changing implement weight so marks stay comparable.",
+              "Start a separate log when changing implement weight so marks stay comparable.",
+          )
+          field.write_text(text)
+
+          # Correct the new pgTAP assertion plan.
+          test = Path("supabase/tests/database/field_event_training_domains.test.sql")
+          text = test.read_text()
+          if "select plan(31);" not in text:
+              raise SystemExit("field test plan marker missing")
+          test.write_text(text.replace("select plan(31);", "select plan(32);", 1))
+
+          # Calendar now counts and renders all four training domains distinctly.
+          calendar = Path("app/(tabs)/calendar.tsx")
+          text = calendar.read_text()
+          marker = 'import { syncAthleteTrainingNotifications } from "../../lib/trainingNotifications";\n'
+          if marker not in text:
+              raise SystemExit("calendar import marker missing")
+          text = text.replace(
+              marker,
+              marker + 'import { TRAINING_DOMAINS, trainingDomainLabel, type TrainingDomain } from "../../lib/trainingDomains";\n',
+              1,
+          )
+          text = text.replace('  workout_type: "track" | "lift";', '  workout_type: TrainingDomain;', 1)
+          old = '''type TrainingMarkerCounts = {
+            track: number;
+            lift: number;
+            total: number;
+          };'''
+          new = '''type TrainingMarkerCounts = {
+            running: number;
+            jumps: number;
+            throws: number;
+            lift: number;
+            total: number;
+          };'''
+          if old not in text:
+              raise SystemExit("calendar count type marker missing")
+          text = text.replace(old, new, 1)
+          marker = '''function formatEventTime(timestamp: string) {
+            return new Date(timestamp).toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+            });
+          }
+          '''
+          helper = '''function formatEventTime(timestamp: string) {
+            return new Date(timestamp).toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+            });
+          }
+
+          function emptyTrainingCounts(): TrainingMarkerCounts {
+            return { running: 0, jumps: 0, throws: 0, lift: 0, total: 0 };
+          }
+
+          function trainingColor(c: ReturnType<typeof useAppColors>, domain: TrainingDomain) {
+            if (domain === "jumps") return c.jumps;
+            if (domain === "throws") return c.throws;
+            if (domain === "lift") return c.lift;
+            return c.running;
+          }
+
+          function workoutHref(workout: Workout) {
+            return workout.workout_type === "jumps" || workout.workout_type === "throws"
+              ? `/field-workout/${workout.id}`
+              : `/workout/${workout.id}`;
+          }
+          '''
+          if marker not in text:
+              raise SystemExit("calendar helper insertion marker missing")
+          text = text.replace(marker, helper, 1)
+          text = text.replace('map[workout.workout_date] = { track: 0, lift: 0, total: 0 };', 'map[workout.workout_date] = emptyTrainingCounts();', 1)
+          text = text.replace('map[assignment.scheduled_date] = { track: 0, lift: 0, total: 0 };', 'map[assignment.scheduled_date] = emptyTrainingCounts();', 1)
+
+          start = text.index('                {hasTrainingMarker && (')
+          end_marker = '                )}\n              </Pressable>'
+          end = text.index(end_marker, start)
+          replacement = '''                {hasTrainingMarker && (
+                  <View style={{ flexDirection: "row", gap: 3, marginTop: 4 }}>
+                    {TRAINING_DOMAINS.map((domain) => {
+                      const loggedCount = logged?.[domain.value] ?? 0;
+                      const assignedCount = assigned?.[domain.value] ?? 0;
+                      if (loggedCount === 0 && assignedCount === 0) return null;
+                      const loggedMarker = loggedCount > 0;
+                      return (
+                        <View
+                          key={domain.value}
+                          style={{
+                            width: 7,
+                            height: 7,
+                            borderRadius: 999,
+                            borderWidth: loggedMarker ? 0 : 1.5,
+                            borderColor: trainingColor(c, domain.value),
+                            backgroundColor: loggedMarker
+                              ? trainingColor(c, domain.value)
+                              : c.card,
+                          }}
+                        />
+                      );
+                    })}
+                  </View>
+                )}'''
+          text = text[:start] + replacement + text[end + len('                )}'):]
+
+          legend_start = text.index('        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>', start)
+          legend_end_marker = '        </View>\n      </View>\n\n      <View'
+          legend_end = text.index(legend_end_marker, legend_start)
+          legend = '''        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <View style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: c.event }} />
+            <Text style={{ color: c.subtext }}>event</Text>
+          </View>
+          {TRAINING_DOMAINS.map((domain) => (
+            <View key={domain.value} style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <View
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 999,
+                  backgroundColor: trainingColor(c, domain.value),
+                }}
+              />
+              <Text style={{ color: c.subtext }}>{domain.label.toLowerCase()}</Text>
+            </View>
+          ))}
+          <Text style={{ color: c.subtext, fontSize: 12 }}>
+            Outline = assigned · filled = logged
+          </Text>
+        </View>'''
+          text = text[:legend_start] + legend + text[legend_end:]
+
+          text = text.replace(
+              'assignment.workout_type_snapshot === "lift" ? c.lift : c.track',
+              'trainingColor(c, assignment.workout_type_snapshot)',
+              1,
+          )
+          text = text.replace(
+              'backgroundColor: workout.workout_type === "lift" ? c.lift : c.track,',
+              'backgroundColor: trainingColor(c, workout.workout_type),',
+              1,
+          )
+          text = text.replace(
+              'onPress={() => router.push(`/workout/${workout.id}`)}',
+              'onPress={() => router.push(workoutHref(workout) as any)}',
+              1,
+          )
+          old = '''                {!!workout.notes && (
+                  <Text numberOfLines={2} style={{ color: c.subtext }}>
+                    {workout.notes}
+                  </Text>
+                )}'''
+          new = '''                <Text style={{ color: c.subtext, fontSize: 12, fontWeight: "700" }}>
+                  {trainingDomainLabel(workout.workout_type)}
+                </Text>
+                {!!workout.notes && (
+                  <Text numberOfLines={2} style={{ color: c.subtext }}>
+                    {workout.notes}
+                  </Text>
+                )}'''
+          if old not in text:
+              raise SystemExit("calendar workout label marker missing")
+          text = text.replace(old, new, 1)
+          calendar.write_text(text)
+          PY
+
+      - name: Verify fixes
+        run: |
+          grep -q 'const fieldClient = supabase as any' app/field-log.tsx
+          grep -q 'select plan(32);' supabase/tests/database/field_event_training_domains.test.sql
+          grep -q 'jumps: number;' 'app/(tabs)/calendar.tsx'
+          grep -q 'Outline = assigned' 'app/(tabs)/calendar.tsx'
+
+      - name: Commit fixes and remove one-shot workflow
+        run: |
+          git config user.name "Amiri Prescod"
+          git config user.email "presso1717@gmail.com"
+          git rm .github/workflows/one-shot-field-calendar-fix.yml
+          git add app/field-log.tsx 'app/(tabs)/calendar.tsx' supabase/tests/database/field_event_training_domains.test.sql
+          git commit -m "fix(field): complete domain-aware logging surfaces"
+          git push origin HEAD:main
