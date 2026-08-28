@@ -148,3 +148,16 @@ The athlete calendar represents each training domain independently:
 - Lift
 
 Assigned training uses an outline marker; logged training uses a filled marker. Personal calendar events remain a separate event marker.
+
+## 11. Validation Gate
+
+Changes to the field-event implementation are not considered complete until the same repository state passes the production engineering gates used by the rest of the application:
+
+- application lint and TypeScript checks;
+- unit tests and coverage execution;
+- Expo configuration validation;
+- iOS, Android, and web production bundle export;
+- local Supabase migration application and schema lint;
+- database authorization and privacy tests.
+
+The hosted Supabase project must not receive the field-event migrations until these repository gates pass together.
