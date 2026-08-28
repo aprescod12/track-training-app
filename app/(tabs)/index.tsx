@@ -5,6 +5,7 @@ import { supabase } from "../../lib/supabase";
 import { formatYMD } from "../../lib/date";
 import PrimaryButton from "../../components/PrimaryButton";
 import { useAppColors } from "../../lib/theme";
+import { TRAINING_DOMAINS, normalizeTrainingDomain, trainingDomainLabel, type TrainingDomain } from "../../lib/trainingDomains";
 import FormScreen from "../../components/FormScreen";
 
 type Entry = {
@@ -23,7 +24,7 @@ type Workout = {
   workout_date: string; // YYYY-MM-DD
   title: string;
   notes: string | null;
-  workout_type: "track" | "lift";
+  workout_type: string;
   workout_entries: Entry[];
 };
 
@@ -56,6 +57,20 @@ function ymdLocal(ts: string) {
   return `${y}-${m}-${day}`;
 }
 
+function workoutHref(workout: Workout) {
+  const domain = normalizeTrainingDomain(workout.workout_type);
+  return domain === "jumps" || domain === "throws"
+    ? `/field-workout/${workout.id}`
+    : `/workout/${workout.id}`;
+}
+
+function trainingColor(c: ReturnType<typeof useAppColors>, domain: TrainingDomain) {
+  if (domain === "jumps") return c.jumps;
+  if (domain === "throws") return c.throws;
+  if (domain === "lift") return c.lift;
+  return c.running;
+}
+
 export default function HomeScreen() {
   const c = useAppColors();
 
@@ -73,7 +88,9 @@ export default function HomeScreen() {
 
   const [weeklyStats, setWeeklyStats] = useState({
     totalDistanceM: 0,
-    trackWorkouts: 0,
+    runningWorkouts: 0,
+    jumpWorkouts: 0,
+    throwWorkouts: 0,
     liftWorkouts: 0,
     liftSets: 0,
   });
@@ -88,11 +105,15 @@ export default function HomeScreen() {
   const [weekEvents, setWeekEvents] = useState<EventRow[]>([]);
 
   const weekCounts = useMemo(() => {
-    const map: Record<string, { track: number; lift: number; total: number }> = {};
+    const map: Record<
+      string,
+      { running: number; jumps: number; throws: number; lift: number; total: number }
+    > = {};
     for (const w of weekWorkouts) {
       const key = w.workout_date;
-      if (!map[key]) map[key] = { track: 0, lift: 0, total: 0 };
-      map[key][w.workout_type] += 1;
+      if (!map[key]) map[key] = { running: 0, jumps: 0, throws: 0, lift: 0, total: 0 };
+      const domain = normalizeTrainingDomain(w.workout_type);
+      map[key][domain] += 1;
       map[key].total += 1;
     }
     return map;
@@ -109,8 +130,6 @@ export default function HomeScreen() {
 
   const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-  const dotTrack = c.dark ? "#34D399" : "green";
-  const dotLift = c.dark ? "#60A5FA" : "blue";
 
   function formatPrettyDate(ymd: string) {
     const d = new Date(ymd + "T00:00:00"); // prevent timezone shift
@@ -198,7 +217,7 @@ export default function HomeScreen() {
       setTodaysWorkout(null);
       setWeekWorkouts([]);
       setWeekEvents([]);
-      setWeeklyStats({ totalDistanceM: 0, trackWorkouts: 0, liftWorkouts: 0, liftSets: 0 });
+      setWeeklyStats({ totalDistanceM: 0, runningWorkouts: 0, jumpWorkouts: 0, throwWorkouts: 0, liftWorkouts: 0, liftSets: 0 });
       setFeaturedExercise(null);
       setFeaturedRows([]);
       setError("Please sign in again to continue.");
@@ -283,8 +302,10 @@ export default function HomeScreen() {
       setWeekEvents((eData as EventRow[]) ?? []);
     }
 
-    const trackWorkouts = weekRows.filter((w: any) => w.workout_type === "track").length;
-    const liftWorkouts = weekRows.filter((w: any) => w.workout_type === "lift").length;
+    const runningWorkouts = weekRows.filter((w: any) => normalizeTrainingDomain(w.workout_type) === "running").length;
+    const jumpWorkouts = weekRows.filter((w: any) => normalizeTrainingDomain(w.workout_type) === "jumps").length;
+    const throwWorkouts = weekRows.filter((w: any) => normalizeTrainingDomain(w.workout_type) === "throws").length;
+    const liftWorkouts = weekRows.filter((w: any) => normalizeTrainingDomain(w.workout_type) === "lift").length;
 
     // 4) Weekly distance + lift sets (✅ my entries only via workouts.user_id)
     const { data: distRows, error: distErr } = await supabase
@@ -302,7 +323,7 @@ export default function HomeScreen() {
     }
 
     const totalDistanceM = (distRows ?? []).reduce((sum: number, r: any) => {
-      if (r.workouts?.workout_type !== "track") return sum;
+      if (normalizeTrainingDomain(r.workouts?.workout_type) !== "running") return sum;
       const perRep = Number(r.exercises?.distance_m ?? 0);
       const reps = Number(r.reps ?? 1);
       const sets = Number(r.sets ?? 1);
@@ -314,7 +335,7 @@ export default function HomeScreen() {
       return sum + Number(r.sets ?? 0);
     }, 0);
 
-    setWeeklyStats({ totalDistanceM, trackWorkouts, liftWorkouts, liftSets });
+    setWeeklyStats({ totalDistanceM, runningWorkouts, jumpWorkouts, throwWorkouts, liftWorkouts, liftSets });
 
     // 5) Exercise list for picker (global list is fine)
     const { data: exData, error: exErr } = await supabase
@@ -416,7 +437,7 @@ export default function HomeScreen() {
       >
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Text style={{ fontSize: 16, fontWeight: "800", color: c.text }}>Today’s Workout</Text>
-          <PrimaryButton title="Log" onPress={() => router.push(`/modal?date=${todayKey}`)} />
+          <PrimaryButton title="Log" onPress={() => router.push(`/workout/new?date=${todayKey}`)} />
         </View>
 
         {todaysWorkout ? (
@@ -424,7 +445,7 @@ export default function HomeScreen() {
             <View style={{ gap: 4 }}>
               <Text style={{ fontWeight: "800", color: c.text }}>{todaysWorkout.title}</Text>
               <Text style={{ color: c.subtext }}>
-                {todaysWorkout.workout_type === "track" ? "Track" : "Lift"} • {todaysWorkout.workout_date}
+                {trainingDomainLabel(todaysWorkout.workout_type)} • {todaysWorkout.workout_date}
               </Text>
               {!!todaysWorkout.notes && <Text style={{ color: c.text }}>{todaysWorkout.notes}</Text>}
             </View>
@@ -455,7 +476,7 @@ export default function HomeScreen() {
               <Text style={{ color: c.subtext }}>No entries yet.</Text>
             )}
 
-            <Pressable onPress={() => router.push(`/workout/${todaysWorkout.id}`)}>
+            <Pressable onPress={() => router.push(workoutHref(todaysWorkout) as any)}>
               <Text style={{ fontWeight: "800", marginTop: 6, color: c.text }}>View details →</Text>
             </Pressable>
           </>
@@ -508,7 +529,7 @@ export default function HomeScreen() {
           >
             <Text style={{ color: c.subtext }}>Workouts</Text>
             <Text style={{ fontSize: 18, fontWeight: "900", color: c.text }}>
-              {weeklyStats.trackWorkouts + weeklyStats.liftWorkouts}
+              {weeklyStats.runningWorkouts + weeklyStats.jumpWorkouts + weeklyStats.throwWorkouts + weeklyStats.liftWorkouts}
             </Text>
           </View>
 
@@ -523,8 +544,11 @@ export default function HomeScreen() {
               gap: 4,
             }}
           >
-            <Text style={{ color: c.subtext }}>Lifts</Text>
-            <Text style={{ fontSize: 18, fontWeight: "900", color: c.text }}>{weeklyStats.liftWorkouts}</Text>
+            <Text style={{ color: c.subtext }}>Field / Lift</Text>
+            <Text style={{ fontSize: 18, fontWeight: "900", color: c.text }}>
+              {weeklyStats.jumpWorkouts + weeklyStats.throwWorkouts} / {weeklyStats.liftWorkouts}
+            </Text>
+            <Text style={{ color: c.subtext, fontSize: 11 }}>sessions</Text>
           </View>
         </View>
       </View>
@@ -678,8 +702,6 @@ export default function HomeScreen() {
           {weekDays.map((d) => {
             const key = formatYMD(d);
             const counts = weekCounts[key];
-            const trackCount = counts?.track ?? 0;
-            const liftCount = counts?.lift ?? 0;
             const total = counts?.total ?? 0;
             const hasEvent = (eventCounts[key] ?? 0) > 0;
 
@@ -724,35 +746,19 @@ export default function HomeScreen() {
                 </View>
 
                 {total > 0 && (
-                  <View style={{ marginTop: 4, alignItems: "center" }}>
-                    {total <= 2 ? (
-                      <View style={{ flexDirection: "row", gap: 4 }}>
-                        {trackCount >= 1 && (
-                          <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: dotTrack }} />
-                        )}
-                        {trackCount >= 2 && (
-                          <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: dotTrack }} />
-                        )}
-                        {liftCount >= 1 && (
-                          <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: dotLift }} />
-                        )}
-                        {liftCount >= 2 && (
-                          <View style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: dotLift }} />
-                        )}
-                      </View>
-                    ) : (
-                      <View
-                        style={{
-                          borderWidth: 1,
-                          borderColor: c.border,
-                          borderRadius: 999,
-                          paddingHorizontal: 6,
-                          paddingVertical: 1,
-                          backgroundColor: c.bg,
-                        }}
-                      >
-                        <Text style={{ fontSize: 10, fontWeight: "800", color: c.text }}>{total}</Text>
-                      </View>
+                  <View style={{ marginTop: 4, flexDirection: "row", gap: 3, alignItems: "center" }}>
+                    {TRAINING_DOMAINS.map((domain) =>
+                      (counts?.[domain.value] ?? 0) > 0 ? (
+                        <View
+                          key={domain.value}
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: 999,
+                            backgroundColor: trainingColor(c, domain.value),
+                          }}
+                        />
+                      ) : null
                     )}
                   </View>
                 )}
