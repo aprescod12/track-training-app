@@ -5,13 +5,14 @@ import { supabase } from "../../lib/supabase";
 import FormScreen from "../../components/FormScreen";
 import { useAppColors } from "../../lib/theme";
 import { formatYMD } from "../../lib/date";
+import { normalizeTrainingDomain, trainingDomainLabel } from "../../lib/trainingDomains";
 
 type WorkoutRow = {
   id: string;
   workout_date: string;
   title: string | null;
   notes: string | null;
-  workout_type: "track" | "lift" | string;
+  workout_type: string;
 };
 
 type EntryRow = {
@@ -66,18 +67,24 @@ export default function ProfileOverviewScreen() {
 
   const [stats, setStats] = useState({
     allTimeWorkouts: 0,
-    allTimeTrack: 0,
+    allTimeRunning: 0,
+    allTimeJumps: 0,
+    allTimeThrows: 0,
     allTimeLift: 0,
     allTimeDistanceM: 0,
 
     weekWorkouts: 0,
-    weekTrack: 0,
+    weekRunning: 0,
+    weekJumps: 0,
+    weekThrows: 0,
     weekLift: 0,
     weekDistanceM: 0,
     weekActiveDays: 0,
 
     monthWorkouts: 0,
-    monthTrack: 0,
+    monthRunning: 0,
+    monthJumps: 0,
+    monthThrows: 0,
     monthLift: 0,
     monthDistanceM: 0,
     monthActiveDays: 0,
@@ -100,16 +107,22 @@ export default function ProfileOverviewScreen() {
       if (userErr || !uid) {
         setStats({
           allTimeWorkouts: 0,
-          allTimeTrack: 0,
+          allTimeRunning: 0,
+          allTimeJumps: 0,
+          allTimeThrows: 0,
           allTimeLift: 0,
           allTimeDistanceM: 0,
           weekWorkouts: 0,
-          weekTrack: 0,
+          weekRunning: 0,
+          weekJumps: 0,
+          weekThrows: 0,
           weekLift: 0,
           weekDistanceM: 0,
           weekActiveDays: 0,
           monthWorkouts: 0,
-          monthTrack: 0,
+          monthRunning: 0,
+          monthJumps: 0,
+          monthThrows: 0,
           monthLift: 0,
           monthDistanceM: 0,
           monthActiveDays: 0,
@@ -139,8 +152,10 @@ export default function ProfileOverviewScreen() {
       setRecentWorkouts(workouts.slice(0, 5));
 
       const allTimeWorkouts = workouts.length;
-      const allTimeTrack = workouts.filter((w) => w.workout_type === "track").length;
-      const allTimeLift = workouts.filter((w) => w.workout_type === "lift").length;
+      const allTimeRunning = workouts.filter((w) => normalizeTrainingDomain(w.workout_type) === "running").length;
+      const allTimeJumps = workouts.filter((w) => normalizeTrainingDomain(w.workout_type) === "jumps").length;
+      const allTimeThrows = workouts.filter((w) => normalizeTrainingDomain(w.workout_type) === "throws").length;
+      const allTimeLift = workouts.filter((w) => normalizeTrainingDomain(w.workout_type) === "lift").length;
 
       const weekRows = workouts.filter(
         (w) => w.workout_date >= weekStartKey && w.workout_date <= todayKey
@@ -152,10 +167,14 @@ export default function ProfileOverviewScreen() {
       const weekWorkouts = weekRows.length;
       const monthWorkouts = monthRows.length;
 
-      const weekTrack = weekRows.filter((w) => w.workout_type === "track").length;
-      const weekLift = weekRows.filter((w) => w.workout_type === "lift").length;
-      const monthTrack = monthRows.filter((w) => w.workout_type === "track").length;
-      const monthLift = monthRows.filter((w) => w.workout_type === "lift").length;
+      const weekRunning = weekRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "running").length;
+      const weekJumps = weekRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "jumps").length;
+      const weekThrows = weekRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "throws").length;
+      const weekLift = weekRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "lift").length;
+      const monthRunning = monthRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "running").length;
+      const monthJumps = monthRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "jumps").length;
+      const monthThrows = monthRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "throws").length;
+      const monthLift = monthRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "lift").length;
 
       const weekActiveDays = new Set(weekRows.map((w) => w.workout_date)).size;
       const monthActiveDays = new Set(monthRows.map((w) => w.workout_date)).size;
@@ -182,7 +201,7 @@ export default function ProfileOverviewScreen() {
         const workout = Array.isArray(r.workouts) ? r.workouts[0] : r.workouts;
         const exercise = Array.isArray(r.exercises) ? r.exercises[0] : r.exercises;
 
-        if (workout?.workout_type !== "track") continue;
+        if (normalizeTrainingDomain(workout?.workout_type) !== "running") continue;
 
         const perRep = Number(exercise?.distance_m ?? 0);
         const reps = Number(r.reps ?? 1);
@@ -203,16 +222,22 @@ export default function ProfileOverviewScreen() {
 
       setStats({
         allTimeWorkouts,
-        allTimeTrack,
+        allTimeRunning,
+        allTimeJumps,
+        allTimeThrows,
         allTimeLift,
         allTimeDistanceM,
         weekWorkouts,
-        weekTrack,
+        weekRunning,
+        weekJumps,
+        weekThrows,
         weekLift,
         weekDistanceM,
         weekActiveDays,
         monthWorkouts,
-        monthTrack,
+        monthRunning,
+        monthJumps,
+        monthThrows,
         monthLift,
         monthDistanceM,
         monthActiveDays,
@@ -230,10 +255,20 @@ export default function ProfileOverviewScreen() {
     }, [load])
   );
 
-  const trackPct = useMemo(() => {
+  const runningPct = useMemo(() => {
     if (!stats.allTimeWorkouts) return 0;
-    return Math.round((stats.allTimeTrack / stats.allTimeWorkouts) * 100);
-  }, [stats.allTimeTrack, stats.allTimeWorkouts]);
+    return Math.round((stats.allTimeRunning / stats.allTimeWorkouts) * 100);
+  }, [stats.allTimeRunning, stats.allTimeWorkouts]);
+
+  const jumpsPct = useMemo(() => {
+    if (!stats.allTimeWorkouts) return 0;
+    return Math.round((stats.allTimeJumps / stats.allTimeWorkouts) * 100);
+  }, [stats.allTimeJumps, stats.allTimeWorkouts]);
+
+  const throwsPct = useMemo(() => {
+    if (!stats.allTimeWorkouts) return 0;
+    return Math.round((stats.allTimeThrows / stats.allTimeWorkouts) * 100);
+  }, [stats.allTimeThrows, stats.allTimeWorkouts]);
 
   const liftPct = useMemo(() => {
     if (!stats.allTimeWorkouts) return 0;
@@ -241,14 +276,21 @@ export default function ProfileOverviewScreen() {
   }, [stats.allTimeLift, stats.allTimeWorkouts]);
 
   const weekAvgDistanceKm = useMemo(() => {
-    if (!stats.weekWorkouts) return 0;
-    return stats.weekDistanceM / stats.weekWorkouts / 1000;
-  }, [stats.weekDistanceM, stats.weekWorkouts]);
+    if (!stats.weekRunning) return 0;
+    return stats.weekDistanceM / stats.weekRunning / 1000;
+  }, [stats.weekDistanceM, stats.weekRunning]);
 
   const monthAvgDistanceKm = useMemo(() => {
-    if (!stats.monthWorkouts) return 0;
-    return stats.monthDistanceM / stats.monthWorkouts / 1000;
-  }, [stats.monthDistanceM, stats.monthWorkouts]);
+    if (!stats.monthRunning) return 0;
+    return stats.monthDistanceM / stats.monthRunning / 1000;
+  }, [stats.monthDistanceM, stats.monthRunning]);
+
+  function workoutHref(workout: WorkoutRow) {
+    const domain = normalizeTrainingDomain(workout.workout_type);
+    return domain === "jumps" || domain === "throws"
+      ? `/field-workout/${workout.id}`
+      : `/workout/${workout.id}`;
+  }
 
   function StatCard({
     label,
@@ -379,24 +421,16 @@ export default function ProfileOverviewScreen() {
                     flexDirection: "row",
                   }}
                 >
-                  <View
-                    style={{
-                      width: `${trackPct}%`,
-                      height: "100%",
-                      backgroundColor: c.primary,
-                    }}
-                  />
-                  <View
-                    style={{
-                      width: `${liftPct}%`,
-                      height: "100%",
-                      backgroundColor: c.border,
-                    }}
-                  />
+                  <View style={{ width: `${runningPct}%`, height: "100%", backgroundColor: c.running }} />
+                  <View style={{ width: `${jumpsPct}%`, height: "100%", backgroundColor: c.jumps }} />
+                  <View style={{ width: `${throwsPct}%`, height: "100%", backgroundColor: c.throws }} />
+                  <View style={{ width: `${liftPct}%`, height: "100%", backgroundColor: c.lift }} />
                 </View>
 
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={{ color: c.subtext }}>Track {trackPct}%</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+                  <Text style={{ color: c.subtext }}>Running {runningPct}%</Text>
+                  <Text style={{ color: c.subtext }}>Jumps {jumpsPct}%</Text>
+                  <Text style={{ color: c.subtext }}>Throws {throwsPct}%</Text>
                   <Text style={{ color: c.subtext }}>Lift {liftPct}%</Text>
                 </View>
               </View>
@@ -405,27 +439,27 @@ export default function ProfileOverviewScreen() {
             <Section title="Quick Access">
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <QuickLink
-                  title="Track Stats"
+                  title="Running Stats"
                   subtitle="Distance, workouts, top exercises"
                   onPress={() => router.push("/profile/track-stats")}
                 />
                 <QuickLink
-                  title="Lift Stats"
-                  subtitle="Volume, reps, top exercises"
-                  onPress={() => router.push("/profile/lift-stats")}
+                  title="Field Stats"
+                  subtitle="Jumps, throws, and training bests"
+                  onPress={() => router.push("/profile/field-stats")}
                 />
               </View>
 
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <QuickLink
+                  title="Lift Stats"
+                  subtitle="Volume, reps, top exercises"
+                  onPress={() => router.push("/profile/lift-stats")}
+                />
+                <QuickLink
                   title="Training Hub"
                   subtitle="Jump into your training tools"
                   onPress={() => router.push("/profile/training-hub")}
-                />
-                <QuickLink
-                  title="Profile"
-                  subtitle="Back to your main profile"
-                  onPress={() => router.push("/(tabs)/profile")}
                 />
               </View>
             </Section>
@@ -440,7 +474,7 @@ export default function ProfileOverviewScreen() {
                 <StatCard
                   label="Distance Logged"
                   value={`${(stats.allTimeDistanceM / 1000).toFixed(2)} km`}
-                  sublabel="Track distance total"
+                  sublabel="Running distance total"
                   onPress={() => router.push("/profile/track-stats")}
                 />
               </View>
@@ -451,12 +485,12 @@ export default function ProfileOverviewScreen() {
                 <StatCard
                   label="Workouts"
                   value={stats.weekWorkouts}
-                  sublabel={`${stats.weekTrack} track • ${stats.weekLift} lift`}
+                  sublabel={`${stats.weekRunning} running • ${stats.weekJumps} jumps • ${stats.weekThrows} throws • ${stats.weekLift} lift`}
                 />
                 <StatCard
                   label="Distance"
                   value={`${(stats.weekDistanceM / 1000).toFixed(2)} km`}
-                  sublabel="Track distance this week"
+                  sublabel="Running distance this week"
                   onPress={() => router.push("/profile/track-stats")}
                 />
               </View>
@@ -470,7 +504,7 @@ export default function ProfileOverviewScreen() {
                 <StatCard
                   label="Avg Distance"
                   value={`${weekAvgDistanceKm.toFixed(2)} km`}
-                  sublabel="Per workout"
+                  sublabel="Per running workout"
                 />
               </View>
             </Section>
@@ -480,12 +514,12 @@ export default function ProfileOverviewScreen() {
                 <StatCard
                   label="Workouts"
                   value={stats.monthWorkouts}
-                  sublabel={`${stats.monthTrack} track • ${stats.monthLift} lift`}
+                  sublabel={`${stats.monthRunning} running • ${stats.monthJumps} jumps • ${stats.monthThrows} throws • ${stats.monthLift} lift`}
                 />
                 <StatCard
                   label="Distance"
                   value={`${(stats.monthDistanceM / 1000).toFixed(2)} km`}
-                  sublabel="Track distance this month"
+                  sublabel="Running distance this month"
                   onPress={() => router.push("/profile/track-stats")}
                 />
               </View>
@@ -499,7 +533,7 @@ export default function ProfileOverviewScreen() {
                 <StatCard
                   label="Avg Distance"
                   value={`${monthAvgDistanceKm.toFixed(2)} km`}
-                  sublabel="Per workout"
+                  sublabel="Per running workout"
                 />
               </View>
             </Section>
@@ -511,7 +545,7 @@ export default function ProfileOverviewScreen() {
                 recentWorkouts.map((w) => (
                   <Pressable
                     key={w.id}
-                    onPress={() => router.push(`/workout/${w.id}`)}
+                    onPress={() => router.push(workoutHref(w) as any)}
                     style={{
                       borderWidth: 1,
                       borderColor: c.border,
@@ -529,7 +563,7 @@ export default function ProfileOverviewScreen() {
                     </View>
 
                     <Text style={{ color: c.subtext }}>
-                      {w.workout_type === "track" ? "Track" : "Lift"}
+                      {trainingDomainLabel(w.workout_type)}
                     </Text>
 
                     {!!w.notes && (

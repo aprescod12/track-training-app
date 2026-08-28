@@ -22,6 +22,7 @@ export default function TrainingHubScreen() {
         onPress={onPress}
         style={{
           flex: 1,
+          minWidth: 220,
           minHeight: large ? 120 : 100,
           borderWidth: 1,
           borderColor: c.border,
@@ -86,11 +87,11 @@ export default function TrainingHubScreen() {
         </View>
 
         <Section title="Quick Actions">
-          <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
             <HubTile
               title="Log Workout"
               subtitle="Start a new workout entry for today or another date."
-              onPress={() => router.push("/modal")}
+              onPress={() => router.push("/workout/new")}
               large
             />
             <HubTile
@@ -103,7 +104,7 @@ export default function TrainingHubScreen() {
         </Section>
 
         <Section title="Team & Coach Tools">
-          <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
             <HubTile
               title="Teams & Roster"
               subtitle="Create teams, invite members, view the roster, and configure explicit coaching access."
@@ -120,11 +121,16 @@ export default function TrainingHubScreen() {
         </Section>
 
         <Section title="Performance">
-          <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
             <HubTile
-              title="Track Stats"
-              subtitle="Distance, recent workouts, top exercises, and PR activity."
+              title="Running Stats"
+              subtitle="Running distance, recent workouts, top exercises, and PR activity."
               onPress={() => router.push("/profile/track-stats")}
+            />
+            <HubTile
+              title="Field Stats"
+              subtitle="Jump and throw training bests, implements, and recent field sessions."
+              onPress={() => router.push("/profile/field-stats")}
             />
             <HubTile
               title="Lift Stats"
@@ -135,7 +141,7 @@ export default function TrainingHubScreen() {
         </Section>
 
         <Section title="Profile & Progress">
-          <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
             <HubTile
               title="Overview"
               subtitle="See your training snapshot, activity, and overall trends."
@@ -152,7 +158,7 @@ export default function TrainingHubScreen() {
         <Section title="Suggested Flow">
           <View style={{ gap: 10 }}>
             <Pressable
-              onPress={() => router.push("/modal")}
+              onPress={() => router.push("/workout/new")}
               style={{
                 borderWidth: 1,
                 borderColor: c.border,
@@ -164,7 +170,7 @@ export default function TrainingHubScreen() {
             >
               <Text style={{ color: c.text, fontWeight: "900" }}>1. Log today’s workout</Text>
               <Text style={{ color: c.subtext }}>
-                Add a track or lift session and keep your history updated.
+                Choose Running, Jumps, Throws, or Lift and keep your history updated.
               </Text>
             </Pressable>
 
@@ -203,7 +209,7 @@ export default function TrainingHubScreen() {
             </Pressable>
 
             <Pressable
-              onPress={() => router.push("/profile/track-stats")}
+              onPress={() => router.push("/profile/field-stats")}
               style={{
                 borderWidth: 1,
                 borderColor: c.border,
@@ -215,7 +221,7 @@ export default function TrainingHubScreen() {
             >
               <Text style={{ color: c.text, fontWeight: "900" }}>4. Dive into performance</Text>
               <Text style={{ color: c.subtext }}>
-                Open Track Stats or Lift Stats to look deeper at your numbers.
+                Open Running, Field, or Lift Stats to look deeper at your numbers.
               </Text>
             </Pressable>
           </View>

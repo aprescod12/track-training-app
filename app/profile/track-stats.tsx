@@ -94,7 +94,7 @@ export default function TrackStatsScreen() {
         .from("workouts")
         .select("id, workout_date, title, notes")
         .eq("user_id", uid)
-        .eq("workout_type", "track")
+        .in("workout_type", ["running", "track"])
         .gte("workout_date", startKey)
         .lte("workout_date", endKey)
         .order("workout_date", { ascending: false })
@@ -130,7 +130,7 @@ export default function TrackStatsScreen() {
         `)
         .eq("user_id", uid)
         .eq("workouts.user_id", uid)
-        .eq("workouts.workout_type", "track")
+        .in("workouts.workout_type", ["running", "track"])
         .gte("workouts.workout_date", startKey)
         .lte("workouts.workout_date", endKey);
 
@@ -202,7 +202,7 @@ export default function TrackStatsScreen() {
       if (!prErr) {
         newPRs = prCount ?? 0;
       } else {
-        console.log("track PR count query skipped:", prErr.message);
+        console.log("running PR count query skipped:", prErr.message);
       }
 
       setStats({
@@ -214,7 +214,7 @@ export default function TrackStatsScreen() {
         newPRs,
       });
     } catch (e: any) {
-      Alert.alert("Error", e?.message ?? "Failed to load track stats");
+      Alert.alert("Error", e?.message ?? "Failed to load running stats");
       setStats({
         totalWorkouts: 0,
         totalDistanceM: 0,
@@ -271,7 +271,7 @@ export default function TrackStatsScreen() {
     <FormScreen>
       <View style={{ gap: 14 }}>
         <View style={{ gap: 4 }}>
-          <Text style={{ fontSize: 24, fontWeight: "900", color: c.text }}>Track Stats</Text>
+          <Text style={{ fontSize: 24, fontWeight: "900", color: c.text }}>Running Stats</Text>
           <Text style={{ color: c.subtext }}>{rangeLabel}</Text>
         </View>
 
@@ -325,7 +325,7 @@ export default function TrackStatsScreen() {
         {loading ? (
           <View style={{ marginTop: 4, flexDirection: "row", alignItems: "center", gap: 10 }}>
             <ActivityIndicator />
-            <Text style={{ color: c.subtext }}>Loading track stats…</Text>
+            <Text style={{ color: c.subtext }}>Loading running stats…</Text>
           </View>
         ) : (
           <>
@@ -351,7 +351,7 @@ export default function TrackStatsScreen() {
                 <StatCard
                   label="Total Workouts"
                   value={stats.totalWorkouts}
-                  sublabel="Track sessions"
+                  sublabel="Running sessions"
                 />
               </View>
 

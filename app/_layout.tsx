@@ -194,7 +194,19 @@ export default Sentry.wrap(function RootLayout() {
           name="profile/track-stats"
           options={{
             presentation: "modal",
-            title: "Track Stats",
+            title: "Running Stats",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
+
+        <Stack.Screen
+          name="profile/field-stats"
+          options={{
+            presentation: "modal",
+            title: "Field Stats",
             headerShown: true,
             headerStyle: { backgroundColor: c.bg },
             headerTintColor: c.text,

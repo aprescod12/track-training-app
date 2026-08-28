@@ -7,6 +7,7 @@ import { router, useFocusEffect } from "expo-router";
 import { getMyProfile, Profile } from "../../lib/profile";
 import Avatar from "../../components/Avatar";
 import { toAppError } from "../../lib/errors";
+import { normalizeTrainingDomain } from "../../lib/trainingDomains";
 
 export default function ProfileScreen() {
   const c = useAppColors();
@@ -17,7 +18,9 @@ export default function ProfileScreen() {
 
   const [stats, setStats] = useState({
     totalWorkouts: 0,
-    trackWorkouts: 0,
+    runningWorkouts: 0,
+    jumpWorkouts: 0,
+    throwWorkouts: 0,
     liftWorkouts: 0,
     totalDistanceM: 0,
     totalLiftSets: 0,
@@ -50,7 +53,9 @@ export default function ProfileScreen() {
       if (userErr || !uid) {
         setStats({
           totalWorkouts: 0,
-          trackWorkouts: 0,
+          runningWorkouts: 0,
+          jumpWorkouts: 0,
+          throwWorkouts: 0,
           liftWorkouts: 0,
           totalDistanceM: 0,
           totalLiftSets: 0,
@@ -67,8 +72,18 @@ export default function ProfileScreen() {
       if (workoutErr) throw workoutErr;
 
       const totalWorkouts = workoutRows?.length ?? 0;
-      const trackWorkouts = (workoutRows ?? []).filter((w) => w.workout_type === "track").length;
-      const liftWorkouts = (workoutRows ?? []).filter((w) => w.workout_type === "lift").length;
+      const runningWorkouts = (workoutRows ?? []).filter(
+        (w) => normalizeTrainingDomain(w.workout_type) === "running"
+      ).length;
+      const jumpWorkouts = (workoutRows ?? []).filter(
+        (w) => normalizeTrainingDomain(w.workout_type) === "jumps"
+      ).length;
+      const throwWorkouts = (workoutRows ?? []).filter(
+        (w) => normalizeTrainingDomain(w.workout_type) === "throws"
+      ).length;
+      const liftWorkouts = (workoutRows ?? []).filter(
+        (w) => normalizeTrainingDomain(w.workout_type) === "lift"
+      ).length;
 
       const { data: distRows, error: distErr } = await supabase
         .from("workout_entries")
@@ -84,7 +99,7 @@ export default function ProfileScreen() {
       if (distErr) throw distErr;
 
       const totalDistanceM = (distRows ?? []).reduce((sum: number, r: any) => {
-        if (r.workouts?.workout_type !== "track") return sum;
+        if (normalizeTrainingDomain(r.workouts?.workout_type) !== "running") return sum;
         const perRep = Number(r.exercises?.distance_m ?? 0);
         const reps = Number(r.reps ?? 1);
         const sets = Number(r.sets ?? 1);
@@ -98,7 +113,9 @@ export default function ProfileScreen() {
 
       setStats({
         totalWorkouts,
-        trackWorkouts,
+        runningWorkouts,
+        jumpWorkouts,
+        throwWorkouts,
         liftWorkouts,
         totalDistanceM,
         totalLiftSets,
@@ -112,7 +129,9 @@ export default function ProfileScreen() {
       Alert.alert("Stats error", appError.message);
       setStats({
         totalWorkouts: 0,
-        trackWorkouts: 0,
+        runningWorkouts: 0,
+        jumpWorkouts: 0,
+        throwWorkouts: 0,
         liftWorkouts: 0,
         totalDistanceM: 0,
         totalLiftSets: 0,
@@ -297,7 +316,7 @@ export default function ProfileScreen() {
               <StatTile
                 label="Distance Logged"
                 value={`${(stats.totalDistanceM / 1000).toFixed(2)} km`}
-                sublabel="Track distance total"
+                sublabel="Running distance total"
                 onPress={() => router.push("/profile/overview")}
               />
             </View>
@@ -335,27 +354,35 @@ export default function ProfileScreen() {
           {loadingStats ? (
             <ActivityIndicator />
           ) : (
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <StatTile
-                label="Track Focus"
-                value={stats.trackWorkouts}
-                sublabel={
-                  stats.totalWorkouts > 0
-                    ? `${Math.round((stats.trackWorkouts / stats.totalWorkouts) * 100)}% of workouts`
-                    : "No workouts yet"
-                }
-                onPress={() => router.push("/profile/track-stats")}
-              />
-              <StatTile
-                label="Lift Focus"
-                value={stats.liftWorkouts}
-                sublabel={
-                  stats.totalWorkouts > 0
-                    ? `${Math.round((stats.liftWorkouts / stats.totalWorkouts) * 100)}% of workouts`
-                    : "No workouts yet"
-                }
-                onPress={() => router.push("/profile/lift-stats")}
-              />
+            <View style={{ gap: 10 }}>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <StatTile
+                  label="Running"
+                  value={stats.runningWorkouts}
+                  sublabel={stats.totalWorkouts > 0 ? `${Math.round((stats.runningWorkouts / stats.totalWorkouts) * 100)}% of workouts` : "No workouts yet"}
+                  onPress={() => router.push("/profile/track-stats")}
+                />
+                <StatTile
+                  label="Jumps"
+                  value={stats.jumpWorkouts}
+                  sublabel={stats.totalWorkouts > 0 ? `${Math.round((stats.jumpWorkouts / stats.totalWorkouts) * 100)}% of workouts` : "No workouts yet"}
+                  onPress={() => router.push("/profile/field-stats?domain=jumps")}
+                />
+              </View>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <StatTile
+                  label="Throws"
+                  value={stats.throwWorkouts}
+                  sublabel={stats.totalWorkouts > 0 ? `${Math.round((stats.throwWorkouts / stats.totalWorkouts) * 100)}% of workouts` : "No workouts yet"}
+                  onPress={() => router.push("/profile/field-stats?domain=throws")}
+                />
+                <StatTile
+                  label="Lift"
+                  value={stats.liftWorkouts}
+                  sublabel={stats.totalWorkouts > 0 ? `${Math.round((stats.liftWorkouts / stats.totalWorkouts) * 100)}% of workouts` : "No workouts yet"}
+                  onPress={() => router.push("/profile/lift-stats")}
+                />
+              </View>
             </View>
           )}
         </View>
