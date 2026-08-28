@@ -1,0 +1,59 @@
+name: One-shot refresh field database types
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/one-shot-refresh-field-types.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 2.114.0
+
+      - name: Start local schema
+        run: supabase db start
+
+      - name: Regenerate database types and remove field any bridge
+        run: |
+          supabase gen types typescript --local > lib/database.types.ts
+          test -s lib/database.types.ts
+          grep -q 'field_attempts' lib/database.types.ts
+          grep -q 'field_event_bests_v' lib/database.types.ts
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('app/field-log.tsx')
+          text = path.read_text()
+          text = text.replace('\nconst fieldClient = supabase as any;\n', '\n', 1)
+          text = text.replace('fieldClient\n        .from("field_event_bests_v")', 'supabase\n        .from("field_event_bests_v")', 1)
+          text = text.replace('fieldClient.from("field_attempts")', 'supabase.from("field_attempts")', 1)
+          if 'fieldClient' in text:
+              raise SystemExit('fieldClient bridge still present')
+          path.write_text(text)
+          PY
+
+      - name: Verify generated types
+        run: |
+          grep -q 'field_attempts:' lib/database.types.ts
+          grep -q 'field_event_bests_v:' lib/database.types.ts
+          ! grep -q 'fieldClient' app/field-log.tsx
+
+      - name: Commit generated types
+        run: |
+          git config user.name "Amiri Prescod"
+          git config user.email "presso1717@gmail.com"
+          git rm .github/workflows/one-shot-refresh-field-types.yml
+          git add lib/database.types.ts app/field-log.tsx
+          git commit -m "chore(db): refresh field event types"
+          git push origin HEAD:main
