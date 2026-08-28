@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.17"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -176,6 +196,47 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "teams"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_training_permissions: {
+        Row: {
+          can_prescribe: boolean
+          can_review: boolean
+          coach_membership_id: string
+          created_at: string
+          granted_by: string | null
+          team_id: string
+          updated_at: string
+          workout_type: string
+        }
+        Insert: {
+          can_prescribe?: boolean
+          can_review?: boolean
+          coach_membership_id: string
+          created_at?: string
+          granted_by?: string | null
+          team_id: string
+          updated_at?: string
+          workout_type: string
+        }
+        Update: {
+          can_prescribe?: boolean
+          can_review?: boolean
+          coach_membership_id?: string
+          created_at?: string
+          granted_by?: string | null
+          team_id?: string
+          updated_at?: string
+          workout_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_training_permissions_membership_same_team_fkey"
+            columns: ["team_id", "coach_membership_id"]
+            isOneToOne: false
+            referencedRelation: "team_memberships"
+            referencedColumns: ["team_id", "id"]
           },
         ]
       }
@@ -355,6 +416,44 @@ export type Database = {
           score_type?: string
         }
         Relationships: []
+      }
+      field_attempts: {
+        Row: {
+          attempt_number: number
+          created_at: string
+          entry_id: string
+          id: string
+          mark_m: number | null
+          notes: string | null
+          outcome: string
+        }
+        Insert: {
+          attempt_number: number
+          created_at?: string
+          entry_id: string
+          id?: string
+          mark_m?: number | null
+          notes?: string | null
+          outcome: string
+        }
+        Update: {
+          attempt_number?: number
+          created_at?: string
+          entry_id?: string
+          id?: string
+          mark_m?: number | null
+          notes?: string | null
+          outcome?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_attempts_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "workout_entries"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       friendships: {
         Row: {
@@ -744,6 +843,7 @@ export type Database = {
           joined_at: string | null
           management_role: string
           member_type: string
+          role_title: string | null
           status: string
           team_id: string
           updated_at: string
@@ -757,6 +857,7 @@ export type Database = {
           joined_at?: string | null
           management_role?: string
           member_type: string
+          role_title?: string | null
           status: string
           team_id: string
           updated_at?: string
@@ -770,6 +871,7 @@ export type Database = {
           joined_at?: string | null
           management_role?: string
           member_type?: string
+          role_title?: string | null
           status?: string
           team_id?: string
           updated_at?: string
@@ -913,11 +1015,14 @@ export type Database = {
       workout_assignment_entries: {
         Row: {
           assignment_id: string
+          attempts: number | null
           created_at: string
           distance_m: number | null
+          event_code: string | null
           exercise_id: string | null
           exercise_name_snapshot: string
           id: string
+          implement_weight_kg: number | null
           intensity_text: string | null
           label: string | null
           notes: string | null
@@ -925,16 +1030,20 @@ export type Database = {
           reps: number | null
           sets: number | null
           sort_order: number
+          target_mark_m: number | null
           target_time_text: string | null
           target_weight: number | null
         }
         Insert: {
           assignment_id: string
+          attempts?: number | null
           created_at?: string
           distance_m?: number | null
+          event_code?: string | null
           exercise_id?: string | null
           exercise_name_snapshot: string
           id?: string
+          implement_weight_kg?: number | null
           intensity_text?: string | null
           label?: string | null
           notes?: string | null
@@ -942,16 +1051,20 @@ export type Database = {
           reps?: number | null
           sets?: number | null
           sort_order: number
+          target_mark_m?: number | null
           target_time_text?: string | null
           target_weight?: number | null
         }
         Update: {
           assignment_id?: string
+          attempts?: number | null
           created_at?: string
           distance_m?: number | null
+          event_code?: string | null
           exercise_id?: string | null
           exercise_name_snapshot?: string
           id?: string
+          implement_weight_kg?: number | null
           intensity_text?: string | null
           label?: string | null
           notes?: string | null
@@ -959,6 +1072,7 @@ export type Database = {
           reps?: number | null
           sets?: number | null
           sort_order?: number
+          target_mark_m?: number | null
           target_time_text?: string | null
           target_weight?: number | null
         }
@@ -1282,9 +1396,11 @@ export type Database = {
         Row: {
           created_at: string
           distance_m: number | null
+          event_code: string | null
           exercise: string | null
           exercise_id: string | null
           id: string
+          implement_weight_kg: number | null
           label: string | null
           lift_reps: number[] | null
           lift_weights: number[] | null
@@ -1302,9 +1418,11 @@ export type Database = {
         Insert: {
           created_at?: string
           distance_m?: number | null
+          event_code?: string | null
           exercise?: string | null
           exercise_id?: string | null
           id?: string
+          implement_weight_kg?: number | null
           label?: string | null
           lift_reps?: number[] | null
           lift_weights?: number[] | null
@@ -1322,9 +1440,11 @@ export type Database = {
         Update: {
           created_at?: string
           distance_m?: number | null
+          event_code?: string | null
           exercise?: string | null
           exercise_id?: string | null
           id?: string
+          implement_weight_kg?: number | null
           label?: string | null
           lift_reps?: number[] | null
           lift_weights?: number[] | null
@@ -1379,11 +1499,14 @@ export type Database = {
       }
       workout_template_entries: {
         Row: {
+          attempts: number | null
           created_at: string
           distance_m: number | null
+          event_code: string | null
           exercise_id: string | null
           exercise_name_snapshot: string
           id: string
+          implement_weight_kg: number | null
           intensity_text: string | null
           label: string | null
           notes: string | null
@@ -1391,17 +1514,21 @@ export type Database = {
           reps: number | null
           sets: number | null
           sort_order: number
+          target_mark_m: number | null
           target_time_text: string | null
           target_weight: number | null
           template_id: string
           updated_at: string
         }
         Insert: {
+          attempts?: number | null
           created_at?: string
           distance_m?: number | null
+          event_code?: string | null
           exercise_id?: string | null
           exercise_name_snapshot: string
           id?: string
+          implement_weight_kg?: number | null
           intensity_text?: string | null
           label?: string | null
           notes?: string | null
@@ -1409,17 +1536,21 @@ export type Database = {
           reps?: number | null
           sets?: number | null
           sort_order: number
+          target_mark_m?: number | null
           target_time_text?: string | null
           target_weight?: number | null
           template_id: string
           updated_at?: string
         }
         Update: {
+          attempts?: number | null
           created_at?: string
           distance_m?: number | null
+          event_code?: string | null
           exercise_id?: string | null
           exercise_name_snapshot?: string
           id?: string
+          implement_weight_kg?: number | null
           intensity_text?: string | null
           label?: string | null
           notes?: string | null
@@ -1427,6 +1558,7 @@ export type Database = {
           reps?: number | null
           sets?: number | null
           sort_order?: number
+          target_mark_m?: number | null
           target_time_text?: string | null
           target_weight?: number | null
           template_id?: string
@@ -1651,6 +1783,23 @@ export type Database = {
             columns: ["workout_id"]
             isOneToOne: false
             referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      field_event_bests_v: {
+        Row: {
+          best_mark_m: number | null
+          event_code: string | null
+          implement_weight_kg: number | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workouts_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1964,7 +2113,11 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
 } as const
+

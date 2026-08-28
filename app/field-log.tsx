@@ -23,7 +23,6 @@ import {
   maybeCreateWorkoutStreakAchievement,
 } from "../lib/achievements";
 
-const fieldClient = supabase as any;
 
 type AttemptDraft = {
   mark: string;
@@ -148,7 +147,7 @@ export default function FieldLogScreen() {
       if (!uid) throw new Error("Please sign in to log training.");
 
       let priorBest: number | null = null;
-      let bestQuery = fieldClient
+      let bestQuery = supabase
         .from("field_event_bests_v")
         .select("best_mark_m")
         .eq("user_id", uid)
@@ -207,7 +206,7 @@ export default function FieldLogScreen() {
         throw entryError ?? new Error("Could not create the field-event entry.");
       }
 
-      const { error: attemptsError } = await fieldClient.from("field_attempts").insert(
+      const { error: attemptsError } = await supabase.from("field_attempts").insert(
         cleanedAttempts.map((attempt) => ({ ...attempt, entry_id: entry.id }))
       );
 
