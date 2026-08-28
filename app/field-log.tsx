@@ -7,7 +7,6 @@ import { formatYMD } from "../lib/date";
 import { supabase } from "../lib/supabase";
 import { useAppColors } from "../lib/theme";
 
-const fieldClient = supabase as any;
 import {
   JUMP_EVENTS,
   THROW_EVENTS,
@@ -23,6 +22,8 @@ import {
   maybeCreateWeeklyWorkoutCountAchievement,
   maybeCreateWorkoutStreakAchievement,
 } from "../lib/achievements";
+
+const fieldClient = supabase as any;
 
 type AttemptDraft = {
   mark: string;

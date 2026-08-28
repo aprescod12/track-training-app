@@ -437,7 +437,7 @@ export default function CalendarScreen() {
           <Text style={{ color: c.subtext, fontSize: 12 }}>
             Outline = assigned · filled = logged
           </Text>
-        </View>        </View>
+        </View>
       </View>
 
       <View
