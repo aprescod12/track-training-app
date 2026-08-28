@@ -1,0 +1,1061 @@
+name: One-shot field performance surfaces
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/one-shot-field-surface-integration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Integrate four-domain performance surfaces
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # -----------------------------------------------------------------
+          # Domain picker preserves an optional date through the chosen logger.
+          # -----------------------------------------------------------------
+          path = Path('app/workout/new.tsx')
+          text = path.read_text()
+          text = text.replace(
+              'import { router } from "expo-router";',
+              'import { router, useLocalSearchParams } from "expo-router";',
+              1,
+          )
+          old = '''function hrefForDomain(domain: TrainingDomain) {
+            if (domain === "jumps" || domain === "throws") {
+              return `/field-log?domain=${domain}`;
+            }
+            return `/modal?domain=${domain}`;
+          }'''
+          new = '''function hrefForDomain(domain: TrainingDomain, date?: string) {
+            const dateQuery = date ? `&date=${encodeURIComponent(date)}` : "";
+            if (domain === "jumps" || domain === "throws") {
+              return `/field-log?domain=${domain}${dateQuery}`;
+            }
+            return `/modal?domain=${domain}${dateQuery}`;
+          }'''
+          if old not in text:
+              raise SystemExit('workout/new href marker missing')
+          text = text.replace(old, new, 1)
+          marker = '''export default function NewWorkoutDomainScreen() {
+            const c = useAppColors();
+          '''
+          replacement = '''export default function NewWorkoutDomainScreen() {
+            const c = useAppColors();
+            const params = useLocalSearchParams<{ date?: string | string[] }>();
+            const rawDate = Array.isArray(params.date) ? params.date[0] : params.date;
+            const date = typeof rawDate === "string" ? rawDate : undefined;
+          '''
+          if marker not in text:
+              raise SystemExit('workout/new component marker missing')
+          text = text.replace(marker, replacement, 1)
+          text = text.replace(
+              'onPress={() => router.push(hrefForDomain(domain.value) as any)}',
+              'onPress={() => router.push(hrefForDomain(domain.value, date) as any)}',
+              1,
+          )
+          path.write_text(text)
+
+          # -----------------------------------------------------------------
+          # Home: all four domains, domain-aware details, and field attempts.
+          # -----------------------------------------------------------------
+          path = Path('app/(tabs)/index.tsx')
+          text = path.read_text()
+          marker = 'import { useAppColors } from "../../lib/theme";\n'
+          if marker not in text:
+              raise SystemExit('home theme import marker missing')
+          text = text.replace(
+              marker,
+              marker + 'import { TRAINING_DOMAINS, normalizeTrainingDomain, trainingDomainLabel, type TrainingDomain } from "../../lib/trainingDomains";\n',
+              1,
+          )
+          old = '''type Entry = {
+            id: string;
+            exercise_id: string | null;
+            exercises?: { name: string } | null;
+            exercise: string | null;
+            reps: number | null;
+            time: string | null;
+            weight: number | null;
+            notes: string | null;
+          };'''
+          new = '''type Entry = {
+            id: string;
+            exercise_id: string | null;
+            exercises?: { name: string } | null;
+            exercise: string | null;
+            reps: number | null;
+            time: string | null;
+            weight: number | null;
+            event_code: string | null;
+            implement_weight_kg: number | null;
+            notes: string | null;
+            field_attempts?: { attempt_number: number; mark_m: number | null; outcome: string }[] | null;
+          };'''
+          if old not in text:
+              raise SystemExit('home Entry type marker missing')
+          text = text.replace(old, new, 1)
+          text = text.replace('  workout_type: "track" | "lift";', '  workout_type: TrainingDomain | "track";', 1)
+
+          marker = '''function ymdLocal(ts: string) {
+            const d = new Date(ts);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            return `${y}-${m}-${day}`;
+          }
+          '''
+          helper = '''function ymdLocal(ts: string) {
+            const d = new Date(ts);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            return `${y}-${m}-${day}`;
+          }
+
+          function workoutHref(workout: Workout) {
+            const domain = normalizeTrainingDomain(workout.workout_type);
+            return domain === "jumps" || domain === "throws"
+              ? `/field-workout/${workout.id}`
+              : `/workout/${workout.id}`;
+          }
+
+          function trainingColor(c: ReturnType<typeof useAppColors>, domain: TrainingDomain) {
+            if (domain === "jumps") return c.jumps;
+            if (domain === "throws") return c.throws;
+            if (domain === "lift") return c.lift;
+            return c.running;
+          }
+          '''
+          if marker not in text:
+              raise SystemExit('home helper marker missing')
+          text = text.replace(marker, helper, 1)
+
+          old = '''  const [weeklyStats, setWeeklyStats] = useState({
+            totalDistanceM: 0,
+            trackWorkouts: 0,
+            liftWorkouts: 0,
+            liftSets: 0,
+          });'''
+          new = '''  const [weeklyStats, setWeeklyStats] = useState({
+            totalDistanceM: 0,
+            runningWorkouts: 0,
+            jumpWorkouts: 0,
+            throwWorkouts: 0,
+            liftWorkouts: 0,
+            liftSets: 0,
+          });'''
+          if old not in text:
+              raise SystemExit('home weeklyStats marker missing')
+          text = text.replace(old, new, 1)
+
+          text = text.replace(
+              '  const [featuredExercise, setFeaturedExercise] = useState<{ exercise_id: string; name: string } | null>(null);',
+              '  const [featuredExercise, setFeaturedExercise] = useState<{ exercise_id: string; name: string; category: string | null } | null>(null);',
+              1,
+          )
+          text = text.replace(
+              '  const [allExercises, setAllExercises] = useState<{ exercise_id: string; name: string }[]>([]);',
+              '  const [allExercises, setAllExercises] = useState<{ exercise_id: string; name: string; category: string | null }[]>([]);',
+              1,
+          )
+
+          old = '''  const weekCounts = useMemo(() => {
+            const map: Record<string, { track: number; lift: number; total: number }> = {};
+            for (const w of weekWorkouts) {
+              const key = w.workout_date;
+              if (!map[key]) map[key] = { track: 0, lift: 0, total: 0 };
+              map[key][w.workout_type] += 1;
+              map[key].total += 1;
+            }
+            return map;
+          }, [weekWorkouts]);'''
+          new = '''  const weekCounts = useMemo(() => {
+            const map: Record<
+              string,
+              { running: number; jumps: number; throws: number; lift: number; total: number }
+            > = {};
+            for (const w of weekWorkouts) {
+              const key = w.workout_date;
+              if (!map[key]) map[key] = { running: 0, jumps: 0, throws: 0, lift: 0, total: 0 };
+              const domain = normalizeTrainingDomain(w.workout_type);
+              map[key][domain] += 1;
+              map[key].total += 1;
+            }
+            return map;
+          }, [weekWorkouts]);'''
+          if old not in text:
+              raise SystemExit('home weekCounts marker missing')
+          text = text.replace(old, new, 1)
+          text = text.replace('  const dotTrack = c.dark ? "#34D399" : "green";\n  const dotLift = c.dark ? "#60A5FA" : "blue";\n\n', '', 1)
+
+          old = '      setWeeklyStats({ totalDistanceM: 0, trackWorkouts: 0, liftWorkouts: 0, liftSets: 0 });'
+          new = '      setWeeklyStats({ totalDistanceM: 0, runningWorkouts: 0, jumpWorkouts: 0, throwWorkouts: 0, liftWorkouts: 0, liftSets: 0 });'
+          if old not in text:
+              raise SystemExit('home reset stats marker missing')
+          text = text.replace(old, new, 1)
+
+          text = text.replace(
+              'workout_entries(id, exercise_id, exercises(name), exercise, reps, time, weight, notes)',
+              'workout_entries(id, exercise_id, exercises(name), exercise, reps, time, weight, event_code, implement_weight_kg, notes, field_attempts(attempt_number, mark_m, outcome))',
+              1,
+          )
+          text = text.replace(
+              '        entry_sets(set_number, rep_number, time_text, reps, weight)\n',
+              '        entry_sets(set_number, rep_number, time_text, reps, weight),\n        field_attempts(attempt_number, mark_m, outcome)\n',
+              1,
+          )
+
+          old = '''    const trackWorkouts = weekRows.filter((w: any) => w.workout_type === "track").length;
+            const liftWorkouts = weekRows.filter((w: any) => w.workout_type === "lift").length;'''
+          new = '''    const runningWorkouts = weekRows.filter((w: any) => normalizeTrainingDomain(w.workout_type) === "running").length;
+            const jumpWorkouts = weekRows.filter((w: any) => normalizeTrainingDomain(w.workout_type) === "jumps").length;
+            const throwWorkouts = weekRows.filter((w: any) => normalizeTrainingDomain(w.workout_type) === "throws").length;
+            const liftWorkouts = weekRows.filter((w: any) => normalizeTrainingDomain(w.workout_type) === "lift").length;'''
+          if old not in text:
+              raise SystemExit('home weekly count marker missing')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              '      if (r.workouts?.workout_type !== "track") return sum;',
+              '      if (normalizeTrainingDomain(r.workouts?.workout_type) !== "running") return sum;',
+              1,
+          )
+          old = '    setWeeklyStats({ totalDistanceM, trackWorkouts, liftWorkouts, liftSets });'
+          new = '    setWeeklyStats({ totalDistanceM, runningWorkouts, jumpWorkouts, throwWorkouts, liftWorkouts, liftSets });'
+          if old not in text:
+              raise SystemExit('home set stats marker missing')
+          text = text.replace(old, new, 1)
+          text = text.replace('.select("exercise_id, name")', '.select("exercise_id, name, category")', 2)
+
+          text = text.replace(
+              '          <PrimaryButton title="Log" onPress={() => router.push(`/modal?date=${todayKey}`)} />',
+              '          <PrimaryButton title="Log" onPress={() => router.push(`/workout/new?date=${todayKey}`)} />',
+              1,
+          )
+          text = text.replace(
+              '{todaysWorkout.workout_type === "track" ? "Track" : "Lift"} • {todaysWorkout.workout_date}',
+              '{trainingDomainLabel(todaysWorkout.workout_type)} • {todaysWorkout.workout_date}',
+              1,
+          )
+
+          old = '''                  {!!e.reps && <Text style={{ color: c.subtext }}>Reps: {e.reps}</Text>}
+                  {!!e.time && <Text style={{ color: c.subtext }}>Time: {e.time}</Text>}
+                  {e.weight !== null && <Text style={{ color: c.subtext }}>Weight: {e.weight}</Text>}
+                  {!!e.notes && <Text style={{ color: c.subtext }}>{e.notes}</Text>}'''
+          new = '''                  {e.implement_weight_kg != null && (
+                    <Text style={{ color: c.subtext }}>Implement: {e.implement_weight_kg} kg</Text>
+                  )}
+                  {(e.field_attempts?.length ?? 0) > 0 ? (
+                    <Text style={{ color: c.subtext }}>Attempts: {e.field_attempts?.length}</Text>
+                  ) : (
+                    <>
+                      {!!e.reps && <Text style={{ color: c.subtext }}>Reps: {e.reps}</Text>}
+                      {!!e.time && <Text style={{ color: c.subtext }}>Time: {e.time}</Text>}
+                      {e.weight !== null && <Text style={{ color: c.subtext }}>Weight: {e.weight}</Text>}
+                    </>
+                  )}
+                  {!!e.notes && <Text style={{ color: c.subtext }}>{e.notes}</Text>}'''
+          if old not in text:
+              raise SystemExit('home today entry marker missing')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              '            <Pressable onPress={() => router.push(`/workout/${todaysWorkout.id}`)}>',
+              '            <Pressable onPress={() => router.push(workoutHref(todaysWorkout) as any)}>',
+              1,
+          )
+          text = text.replace(
+              '{weeklyStats.trackWorkouts + weeklyStats.liftWorkouts}',
+              '{weeklyStats.runningWorkouts + weeklyStats.jumpWorkouts + weeklyStats.throwWorkouts + weeklyStats.liftWorkouts}',
+              1,
+          )
+          old = '''            <Text style={{ color: c.subtext }}>Lifts</Text>
+            <Text style={{ fontSize: 18, fontWeight: "900", color: c.text }}>{weeklyStats.liftWorkouts}</Text>'''
+          new = '''            <Text style={{ color: c.subtext }}>Field / Lift</Text>
+            <Text style={{ fontSize: 18, fontWeight: "900", color: c.text }}>
+              {weeklyStats.jumpWorkouts + weeklyStats.throwWorkouts} / {weeklyStats.liftWorkouts}
+            </Text>
+            <Text style={{ color: c.subtext, fontSize: 11 }}>sessions</Text>'''
+          if old not in text:
+              raise SystemExit('home lift card marker missing')
+          text = text.replace(old, new, 1)
+
+          text = text.replace(
+              '                const isLift = r.workouts?.workout_type === "lift";\n',
+              '                const workoutDomain = normalizeTrainingDomain(r.workouts?.workout_type);\n                const isLift = workoutDomain === "lift";\n                const isField = workoutDomain === "jumps" || workoutDomain === "throws";\n',
+              1,
+          )
+          old = '''                      const sets = (r.entry_sets ?? []) as Array<{
+                        set_number: number;
+                        rep_number: number | null;
+                        time_text: string | null;
+                        reps: number | null;
+                        weight: number | null;
+                      }>;
+
+                      if (!sets.length) {
+                        return <Text style={{ color: c.subtext }}>No sets recorded.</Text>;
+                      }'''
+          new = '''                      if (isField) {
+                        const attempts = [...(r.field_attempts ?? [])].sort(
+                          (a: any, b: any) => Number(a.attempt_number) - Number(b.attempt_number)
+                        );
+                        if (!attempts.length) {
+                          return <Text style={{ color: c.subtext }}>No attempts recorded.</Text>;
+                        }
+                        return attempts.slice(0, 6).map((attempt: any) => (
+                          <Text key={attempt.attempt_number} style={{ color: c.subtext }} numberOfLines={1}>
+                            Attempt {attempt.attempt_number}: {attempt.mark_m != null ? `${Number(attempt.mark_m).toFixed(2)} m` : "—"} · {attempt.outcome}
+                          </Text>
+                        ));
+                      }
+
+                      const sets = (r.entry_sets ?? []) as {
+                        set_number: number;
+                        rep_number: number | null;
+                        time_text: string | null;
+                        reps: number | null;
+                        weight: number | null;
+                      }[];
+
+                      if (!sets.length) {
+                        return <Text style={{ color: c.subtext }}>No sets recorded.</Text>;
+                      }'''
+          if old not in text:
+              raise SystemExit('home featured sets marker missing')
+          text = text.replace(old, new, 1)
+
+          old = '''              <Pressable onPress={() => router.push(`/history/${featuredExercise.exercise_id}`)}>
+                <Text style={{ color: c.subtext, fontWeight: "800" }}>History</Text>
+              </Pressable>'''
+          new = '''              <Pressable
+                onPress={() =>
+                  router.push(
+                    (featuredExercise.category === "jumps" || featuredExercise.category === "throws"
+                      ? `/profile/field-stats?domain=${featuredExercise.category}`
+                      : `/history/${featuredExercise.exercise_id}`) as any
+                  )
+                }
+              >
+                <Text style={{ color: c.subtext, fontWeight: "800" }}>
+                  {featuredExercise.category === "jumps" || featuredExercise.category === "throws"
+                    ? "Field stats"
+                    : "History"}
+                </Text>
+              </Pressable>'''
+          if old not in text:
+              raise SystemExit('home featured history marker missing')
+          text = text.replace(old, new, 1)
+
+          old = '''            const trackCount = counts?.track ?? 0;
+            const liftCount = counts?.lift ?? 0;
+            const total = counts?.total ?? 0;'''
+          new = '''            const total = counts?.total ?? 0;'''
+          if old not in text:
+              raise SystemExit('home weekly calendar count vars missing')
+          text = text.replace(old, new, 1)
+          start = text.index('                {total > 0 && (')
+          end_marker = '                )}\n              </Pressable>'
+          end = text.index(end_marker, start)
+          replacement = '''                {total > 0 && (
+                  <View style={{ marginTop: 4, flexDirection: "row", gap: 3, alignItems: "center" }}>
+                    {TRAINING_DOMAINS.map((domain) =>
+                      (counts?.[domain.value] ?? 0) > 0 ? (
+                        <View
+                          key={domain.value}
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: 999,
+                            backgroundColor: trainingColor(c, domain.value),
+                          }}
+                        />
+                      ) : null
+                    )}
+                  </View>
+                )}'''
+          text = text[:start] + replacement + text[end + len('                )}'):]
+          path.write_text(text)
+
+          # -----------------------------------------------------------------
+          # Running Stats: keep the route, update domain semantics.
+          # -----------------------------------------------------------------
+          path = Path('app/profile/track-stats.tsx')
+          text = path.read_text()
+          text = text.replace('TrackWorkoutRow', 'RunningWorkoutRow')
+          text = text.replace('TrackStatsScreen', 'RunningStatsScreen')
+          text = text.replace('trackWorkouts', 'runningWorkouts')
+          text = text.replace('track PR count query skipped:', 'running PR count query skipped:')
+          text = text.replace('Failed to load track stats', 'Failed to load running stats')
+          text = text.replace('Loading track stats…', 'Loading running stats…')
+          text = text.replace('Track Stats', 'Running Stats')
+          text = text.replace('Track sessions', 'Running sessions')
+          text = text.replace('.eq("workout_type", "track")', '.in("workout_type", ["running", "track"])')
+          text = text.replace('.eq("workouts.workout_type", "track")', '.in("workouts.workout_type", ["running", "track"])')
+          path.write_text(text)
+
+          # -----------------------------------------------------------------
+          # Profile: four-domain focus counts; Running owns distance.
+          # -----------------------------------------------------------------
+          path = Path('app/(tabs)/profile.tsx')
+          text = path.read_text()
+          marker = 'import { toAppError } from "../../lib/errors";\n'
+          if marker not in text:
+              raise SystemExit('profile import marker missing')
+          text = text.replace(marker, marker + 'import { normalizeTrainingDomain } from "../../lib/trainingDomains";\n', 1)
+          text = text.replace('    trackWorkouts: 0,', '    runningWorkouts: 0,\n    jumpWorkouts: 0,\n    throwWorkouts: 0,', 1)
+          text = text.replace('          trackWorkouts: 0,', '          runningWorkouts: 0,\n          jumpWorkouts: 0,\n          throwWorkouts: 0,', 2)
+          old = '''      const trackWorkouts = (workoutRows ?? []).filter((w) => w.workout_type === "track").length;
+            const liftWorkouts = (workoutRows ?? []).filter((w) => w.workout_type === "lift").length;'''
+          new = '''      const runningWorkouts = (workoutRows ?? []).filter((w) => normalizeTrainingDomain(w.workout_type) === "running").length;
+            const jumpWorkouts = (workoutRows ?? []).filter((w) => normalizeTrainingDomain(w.workout_type) === "jumps").length;
+            const throwWorkouts = (workoutRows ?? []).filter((w) => normalizeTrainingDomain(w.workout_type) === "throws").length;
+            const liftWorkouts = (workoutRows ?? []).filter((w) => normalizeTrainingDomain(w.workout_type) === "lift").length;'''
+          if old not in text:
+              raise SystemExit('profile count marker missing')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              '        if (r.workouts?.workout_type !== "track") return sum;',
+              '        if (normalizeTrainingDomain(r.workouts?.workout_type) !== "running") return sum;',
+              1,
+          )
+          text = text.replace('        trackWorkouts,\n        liftWorkouts,', '        runningWorkouts,\n        jumpWorkouts,\n        throwWorkouts,\n        liftWorkouts,', 1)
+          text = text.replace('sublabel="Track distance total"', 'sublabel="Running distance total"', 1)
+          old = '''            <View style={{ flexDirection: "row", gap: 10 }}>
+              <StatTile
+                label="Track Focus"
+                value={stats.trackWorkouts}
+                sublabel={
+                  stats.totalWorkouts > 0
+                    ? `${Math.round((stats.trackWorkouts / stats.totalWorkouts) * 100)}% of workouts`
+                    : "No workouts yet"
+                }
+                onPress={() => router.push("/profile/track-stats")}
+              />
+              <StatTile
+                label="Lift Focus"
+                value={stats.liftWorkouts}
+                sublabel={
+                  stats.totalWorkouts > 0
+                    ? `${Math.round((stats.liftWorkouts / stats.totalWorkouts) * 100)}% of workouts`
+                    : "No workouts yet"
+                }
+                onPress={() => router.push("/profile/lift-stats")}
+              />
+            </View>'''
+          new = '''            <>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <StatTile
+                  label="Running"
+                  value={stats.runningWorkouts}
+                  sublabel={stats.totalWorkouts > 0 ? `${Math.round((stats.runningWorkouts / stats.totalWorkouts) * 100)}% of workouts` : "No workouts yet"}
+                  onPress={() => router.push("/profile/track-stats")}
+                />
+                <StatTile
+                  label="Jumps"
+                  value={stats.jumpWorkouts}
+                  sublabel={stats.totalWorkouts > 0 ? `${Math.round((stats.jumpWorkouts / stats.totalWorkouts) * 100)}% of workouts` : "No workouts yet"}
+                  onPress={() => router.push("/profile/field-stats?domain=jumps")}
+                />
+              </View>
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+                <StatTile
+                  label="Throws"
+                  value={stats.throwWorkouts}
+                  sublabel={stats.totalWorkouts > 0 ? `${Math.round((stats.throwWorkouts / stats.totalWorkouts) * 100)}% of workouts` : "No workouts yet"}
+                  onPress={() => router.push("/profile/field-stats?domain=throws")}
+                />
+                <StatTile
+                  label="Lift"
+                  value={stats.liftWorkouts}
+                  sublabel={stats.totalWorkouts > 0 ? `${Math.round((stats.liftWorkouts / stats.totalWorkouts) * 100)}% of workouts` : "No workouts yet"}
+                  onPress={() => router.push("/profile/lift-stats")}
+                />
+              </View>
+            </>'''
+          if old not in text:
+              raise SystemExit('profile performance marker missing')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          # -----------------------------------------------------------------
+          # Overview: migrate Track semantics to Running then add field split.
+          # -----------------------------------------------------------------
+          path = Path('app/profile/overview.tsx')
+          text = path.read_text()
+          marker = 'import { formatYMD } from "../../lib/date";\n'
+          if marker not in text:
+              raise SystemExit('overview import marker missing')
+          text = text.replace(
+              marker,
+              marker + 'import { normalizeTrainingDomain, trainingDomainLabel, type TrainingDomain } from "../../lib/trainingDomains";\n',
+              1,
+          )
+          text = text.replace('"track" | "lift" | string', 'TrainingDomain | "track" | string')
+          text = text.replace('allTimeTrack', 'allTimeRunning')
+          text = text.replace('weekTrack', 'weekRunning')
+          text = text.replace('monthTrack', 'monthRunning')
+          text = text.replace('trackPct', 'runningPct')
+          text = text.replace('Track Stats', 'Running Stats')
+          text = text.replace('Track distance', 'Running distance')
+          text = text.replace('track •', 'running •')
+          text = text.replace('/profile/running-stats', '/profile/track-stats')
+
+          # Add field count properties to each stats object shape.
+          text = text.replace('    allTimeRunning: 0,\n    allTimeLift: 0,', '    allTimeRunning: 0,\n    allTimeJumps: 0,\n    allTimeThrows: 0,\n    allTimeLift: 0,', 1)
+          text = text.replace('    weekRunning: 0,\n    weekLift: 0,', '    weekRunning: 0,\n    weekJumps: 0,\n    weekThrows: 0,\n    weekLift: 0,', 1)
+          text = text.replace('    monthRunning: 0,\n    monthLift: 0,', '    monthRunning: 0,\n    monthJumps: 0,\n    monthThrows: 0,\n    monthLift: 0,', 1)
+          text = text.replace('          allTimeRunning: 0,\n          allTimeLift: 0,', '          allTimeRunning: 0,\n          allTimeJumps: 0,\n          allTimeThrows: 0,\n          allTimeLift: 0,', 1)
+          text = text.replace('          weekRunning: 0,\n          weekLift: 0,', '          weekRunning: 0,\n          weekJumps: 0,\n          weekThrows: 0,\n          weekLift: 0,', 1)
+          text = text.replace('          monthRunning: 0,\n          monthLift: 0,', '          monthRunning: 0,\n          monthJumps: 0,\n          monthThrows: 0,\n          monthLift: 0,', 1)
+
+          old = '''      const allTimeRunning = workouts.filter((w) => w.workout_type === "track").length;
+            const allTimeLift = workouts.filter((w) => w.workout_type === "lift").length;'''
+          new = '''      const allTimeRunning = workouts.filter((w) => normalizeTrainingDomain(w.workout_type) === "running").length;
+            const allTimeJumps = workouts.filter((w) => normalizeTrainingDomain(w.workout_type) === "jumps").length;
+            const allTimeThrows = workouts.filter((w) => normalizeTrainingDomain(w.workout_type) === "throws").length;
+            const allTimeLift = workouts.filter((w) => normalizeTrainingDomain(w.workout_type) === "lift").length;'''
+          if old not in text:
+              raise SystemExit('overview all-time count marker missing')
+          text = text.replace(old, new, 1)
+          old = '''      const weekRunning = weekRows.filter((w) => w.workout_type === "track").length;
+            const weekLift = weekRows.filter((w) => w.workout_type === "lift").length;
+            const monthRunning = monthRows.filter((w) => w.workout_type === "track").length;
+            const monthLift = monthRows.filter((w) => w.workout_type === "lift").length;'''
+          new = '''      const weekRunning = weekRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "running").length;
+            const weekJumps = weekRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "jumps").length;
+            const weekThrows = weekRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "throws").length;
+            const weekLift = weekRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "lift").length;
+            const monthRunning = monthRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "running").length;
+            const monthJumps = monthRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "jumps").length;
+            const monthThrows = monthRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "throws").length;
+            const monthLift = monthRows.filter((w) => normalizeTrainingDomain(w.workout_type) === "lift").length;'''
+          if old not in text:
+              raise SystemExit('overview period count marker missing')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              '        if (workout?.workout_type !== "track") continue;',
+              '        if (normalizeTrainingDomain(workout?.workout_type) !== "running") continue;',
+              1,
+          )
+          text = text.replace('        allTimeRunning,\n        allTimeLift,', '        allTimeRunning,\n        allTimeJumps,\n        allTimeThrows,\n        allTimeLift,', 1)
+          text = text.replace('        weekRunning,\n        weekLift,', '        weekRunning,\n        weekJumps,\n        weekThrows,\n        weekLift,', 1)
+          text = text.replace('        monthRunning,\n        monthLift,', '        monthRunning,\n        monthJumps,\n        monthThrows,\n        monthLift,', 1)
+
+          # Running averages should divide by running sessions, not every workout.
+          text = text.replace('    if (!stats.weekWorkouts) return 0;\n    return stats.weekDistanceM / stats.weekWorkouts / 1000;', '    if (!stats.weekRunning) return 0;\n    return stats.weekDistanceM / stats.weekRunning / 1000;', 1)
+          text = text.replace('[stats.weekDistanceM, stats.weekWorkouts]', '[stats.weekDistanceM, stats.weekRunning]', 1)
+          text = text.replace('    if (!stats.monthWorkouts) return 0;\n    return stats.monthDistanceM / stats.monthWorkouts / 1000;', '    if (!stats.monthRunning) return 0;\n    return stats.monthDistanceM / stats.monthRunning / 1000;', 1)
+          text = text.replace('[stats.monthDistanceM, stats.monthWorkouts]', '[stats.monthDistanceM, stats.monthRunning]', 1)
+
+          # Add field percentages.
+          marker = '''  const liftPct = useMemo(() => {
+            if (!stats.allTimeWorkouts) return 0;
+            return Math.round((stats.allTimeLift / stats.allTimeWorkouts) * 100);
+          }, [stats.allTimeLift, stats.allTimeWorkouts]);
+          '''
+          replacement = '''  const jumpsPct = useMemo(() => {
+            if (!stats.allTimeWorkouts) return 0;
+            return Math.round((stats.allTimeJumps / stats.allTimeWorkouts) * 100);
+          }, [stats.allTimeJumps, stats.allTimeWorkouts]);
+
+          const throwsPct = useMemo(() => {
+            if (!stats.allTimeWorkouts) return 0;
+            return Math.round((stats.allTimeThrows / stats.allTimeWorkouts) * 100);
+          }, [stats.allTimeThrows, stats.allTimeWorkouts]);
+
+          const liftPct = useMemo(() => {
+            if (!stats.allTimeWorkouts) return 0;
+            return Math.round((stats.allTimeLift / stats.allTimeWorkouts) * 100);
+          }, [stats.allTimeLift, stats.allTimeWorkouts]);
+          '''
+          if marker not in text:
+              raise SystemExit('overview percentage marker missing')
+          text = text.replace(marker, replacement, 1)
+
+          marker = '''  function StatCard({'''
+          helper = '''  function workoutHref(workout: WorkoutRow) {
+            const domain = normalizeTrainingDomain(workout.workout_type);
+            return domain === "jumps" || domain === "throws"
+              ? `/field-workout/${workout.id}`
+              : `/workout/${workout.id}`;
+          }
+
+          function StatCard({'''
+          if marker not in text:
+              raise SystemExit('overview helper insertion marker missing')
+          text = text.replace(marker, helper, 1)
+
+          # Four-color training split.
+          old = '''                  <View
+                    style={{
+                      width: `${runningPct}%`,
+                      height: "100%",
+                      backgroundColor: c.primary,
+                    }}
+                  />
+                  <View
+                    style={{
+                      width: `${liftPct}%`,
+                      height: "100%",
+                      backgroundColor: c.border,
+                    }}
+                  />'''
+          new = '''                  <View style={{ width: `${runningPct}%`, height: "100%", backgroundColor: c.running }} />
+                  <View style={{ width: `${jumpsPct}%`, height: "100%", backgroundColor: c.jumps }} />
+                  <View style={{ width: `${throwsPct}%`, height: "100%", backgroundColor: c.throws }} />
+                  <View style={{ width: `${liftPct}%`, height: "100%", backgroundColor: c.lift }} />'''
+          if old not in text:
+              raise SystemExit('overview split bar marker missing')
+          text = text.replace(old, new, 1)
+          old = '''                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={{ color: c.subtext }}>Track {runningPct}%</Text>
+                  <Text style={{ color: c.subtext }}>Lift {liftPct}%</Text>
+                </View>'''
+          new = '''                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+                  <Text style={{ color: c.subtext }}>Running {runningPct}%</Text>
+                  <Text style={{ color: c.subtext }}>Jumps {jumpsPct}%</Text>
+                  <Text style={{ color: c.subtext }}>Throws {throwsPct}%</Text>
+                  <Text style={{ color: c.subtext }}>Lift {liftPct}%</Text>
+                </View>'''
+          if old not in text:
+              raise SystemExit('overview split legend marker missing')
+          text = text.replace(old, new, 1)
+
+          # Surface field stats without removing existing access.
+          old = '''              <View style={{ flexDirection: "row", gap: 10 }}>
+                <QuickLink
+                  title="Running Stats"
+                  subtitle="Distance, workouts, top exercises"
+                  onPress={() => router.push("/profile/track-stats")}
+                />
+                <QuickLink
+                  title="Lift Stats"
+                  subtitle="Volume, reps, top exercises"
+                  onPress={() => router.push("/profile/lift-stats")}
+                />
+              </View>
+
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <QuickLink
+                  title="Training Hub"
+                  subtitle="Jump into your training tools"
+                  onPress={() => router.push("/profile/training-hub")}
+                />
+                <QuickLink
+                  title="Profile"
+                  subtitle="Back to your main profile"
+                  onPress={() => router.push("/(tabs)/profile")}
+                />
+              </View>'''
+          new = '''              <View style={{ flexDirection: "row", gap: 10 }}>
+                <QuickLink
+                  title="Running Stats"
+                  subtitle="Distance, workouts, top exercises"
+                  onPress={() => router.push("/profile/track-stats")}
+                />
+                <QuickLink
+                  title="Field Stats"
+                  subtitle="Jumps, throws, and training bests"
+                  onPress={() => router.push("/profile/field-stats")}
+                />
+              </View>
+
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <QuickLink
+                  title="Lift Stats"
+                  subtitle="Volume, reps, top exercises"
+                  onPress={() => router.push("/profile/lift-stats")}
+                />
+                <QuickLink
+                  title="Training Hub"
+                  subtitle="Jump into your training tools"
+                  onPress={() => router.push("/profile/training-hub")}
+                />
+              </View>
+
+              <QuickLink
+                title="Profile"
+                subtitle="Back to your main profile"
+                onPress={() => router.push("/(tabs)/profile")}
+              />'''
+          if old not in text:
+              raise SystemExit('overview quick access marker missing')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              'sublabel={`${stats.weekRunning} running • ${stats.weekLift} lift`}',
+              'sublabel={`${stats.weekRunning} running • ${stats.weekJumps} jumps • ${stats.weekThrows} throws • ${stats.weekLift} lift`}',
+              1,
+          )
+          text = text.replace(
+              'sublabel={`${stats.monthRunning} running • ${stats.monthLift} lift`}',
+              'sublabel={`${stats.monthRunning} running • ${stats.monthJumps} jumps • ${stats.monthThrows} throws • ${stats.monthLift} lift`}',
+              1,
+          )
+          text = text.replace('sublabel="Per workout"', 'sublabel="Per running workout"', 2)
+          text = text.replace(
+              'onPress={() => router.push(`/workout/${w.id}`)}',
+              'onPress={() => router.push(workoutHref(w) as any)}',
+              1,
+          )
+          old = '''                    <Text style={{ color: c.subtext }}>
+                      {w.workout_type === "track" ? "Track" : "Lift"}
+                    </Text>'''
+          new = '''                    <Text style={{ color: c.subtext }}>
+                      {trainingDomainLabel(w.workout_type)}
+                    </Text>'''
+          if old not in text:
+              raise SystemExit('overview recent domain marker missing')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          # -----------------------------------------------------------------
+          # Training Hub: route through domain picker and expose field stats.
+          # -----------------------------------------------------------------
+          path = Path('app/profile/training-hub.tsx')
+          text = path.read_text()
+          text = text.replace('onPress={() => router.push("/modal")}', 'onPress={() => router.push("/workout/new")}', 2)
+          text = text.replace('title="Track Stats"', 'title="Running Stats"', 1)
+          text = text.replace('subtitle="Distance, recent workouts, top exercises, and PR activity."', 'subtitle="Running distance, recent sessions, top exercises, and PR activity."', 1)
+          old = '''            <HubTile
+              title="Lift Stats"
+              subtitle="Volume, sets, reps, top lifts, and recent strength work."
+              onPress={() => router.push("/profile/lift-stats")}
+            />'''
+          new = '''            <HubTile
+              title="Field Stats"
+              subtitle="Jump and throw training bests, implements, and recent field sessions."
+              onPress={() => router.push("/profile/field-stats")}
+            />
+            <HubTile
+              title="Lift Stats"
+              subtitle="Volume, sets, reps, top lifts, and recent strength work."
+              onPress={() => router.push("/profile/lift-stats")}
+            />'''
+          if old not in text:
+              raise SystemExit('training hub performance marker missing')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              'Add a track or lift session and keep your history updated.',
+              'Choose Running, Jumps, Throws, or Lift and keep your history updated.',
+              1,
+          )
+          text = text.replace(
+              'Open Track Stats or Lift Stats to look deeper at your numbers.',
+              'Open Running, Field, or Lift Stats to look deeper at your numbers.',
+              1,
+          )
+          path.write_text(text)
+
+          # -----------------------------------------------------------------
+          # Field Stats: first-class jumps/throws performance surface.
+          # -----------------------------------------------------------------
+          field_stats = Path('app/profile/field-stats.tsx')
+          field_stats.write_text(r'''import { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import FormScreen from "../../components/FormScreen";
+import PrimaryButton from "../../components/PrimaryButton";
+import { supabase } from "../../lib/supabase";
+import { useAppColors } from "../../lib/theme";
+import {
+  JUMP_EVENTS,
+  THROW_EVENTS,
+  fieldEventLabel,
+  type FieldTrainingDomain,
+} from "../../lib/trainingDomains";
+
+type BestRow = {
+  user_id: string | null;
+  event_code: string | null;
+  implement_weight_kg: number | null;
+  best_mark_m: number | null;
+};
+
+type RecentFieldWorkout = {
+  id: string;
+  workout_date: string;
+  title: string;
+  notes: string | null;
+};
+
+function prettyDate(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+export default function FieldStatsScreen() {
+  const c = useAppColors();
+  const params = useLocalSearchParams<{ domain?: string | string[] }>();
+  const rawDomain = Array.isArray(params.domain) ? params.domain[0] : params.domain;
+  const [domain, setDomain] = useState<FieldTrainingDomain>(rawDomain === "throws" ? "throws" : "jumps");
+  const [bests, setBests] = useState<BestRow[]>([]);
+  const [recent, setRecent] = useState<RecentFieldWorkout[]>([]);
+  const [sessionCount, setSessionCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const eventOptions = domain === "jumps" ? JUMP_EVENTS : THROW_EVENTS;
+  const eventOrder = useMemo(
+    () => new Map(eventOptions.map((event, index) => [event.value, index])),
+    [eventOptions]
+  );
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const uid = userData.user?.id;
+      if (userError || !uid) throw userError ?? new Error("Please sign in again.");
+
+      const eventCodes = (domain === "jumps" ? JUMP_EVENTS : THROW_EVENTS).map((event) => event.value);
+      const [bestRes, recentRes, countRes] = await Promise.all([
+        supabase
+          .from("field_event_bests_v")
+          .select("user_id, event_code, implement_weight_kg, best_mark_m")
+          .eq("user_id", uid)
+          .in("event_code", eventCodes),
+        supabase
+          .from("workouts")
+          .select("id, workout_date, title, notes")
+          .eq("user_id", uid)
+          .eq("workout_type", domain)
+          .order("workout_date", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(12),
+        supabase
+          .from("workouts")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", uid)
+          .eq("workout_type", domain),
+      ]);
+
+      if (bestRes.error) throw bestRes.error;
+      if (recentRes.error) throw recentRes.error;
+      if (countRes.error) throw countRes.error;
+
+      const sorted = [...(bestRes.data ?? [])].sort((a, b) => {
+        const eventA = eventOrder.get(a.event_code as any) ?? 999;
+        const eventB = eventOrder.get(b.event_code as any) ?? 999;
+        if (eventA !== eventB) return eventA - eventB;
+        return Number(a.implement_weight_kg ?? 0) - Number(b.implement_weight_kg ?? 0);
+      });
+
+      setBests(sorted as BestRow[]);
+      setRecent((recentRes.data ?? []) as RecentFieldWorkout[]);
+      setSessionCount(countRes.count ?? 0);
+    } catch (loadError: any) {
+      const message = String(loadError?.message ?? loadError ?? "");
+      setError(
+        message.toLowerCase().includes("field_event_bests_v") || message.toLowerCase().includes("schema cache")
+          ? "Field stats are not available in this environment until the field-event migration is applied."
+          : message || "Could not load field stats."
+      );
+      setBests([]);
+      setRecent([]);
+      setSessionCount(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [domain, eventOrder]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
+
+  const groupedBests = useMemo(() => {
+    const groups = new Map<string, BestRow[]>();
+    for (const row of bests) {
+      if (!row.event_code) continue;
+      const current = groups.get(row.event_code) ?? [];
+      current.push(row);
+      groups.set(row.event_code, current);
+    }
+    return groups;
+  }, [bests]);
+
+  const accent = domain === "jumps" ? c.jumps : c.throws;
+
+  return (
+    <FormScreen contentContainerStyle={{ width: "100%", maxWidth: 900, alignSelf: "center" }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={{ color: c.text, fontSize: 24, fontWeight: "900" }}>Field Stats</Text>
+          <Text style={{ color: c.subtext }}>
+            Practice marks and training bests for jumps and throws. Competition and wind validation are separate future features.
+          </Text>
+        </View>
+        <PrimaryButton title={`Log ${domain === "jumps" ? "jumps" : "throws"}`} onPress={() => router.push(`/field-log?domain=${domain}`)} />
+      </View>
+
+      <View style={{ flexDirection: "row", borderWidth: 1, borderColor: c.border, backgroundColor: c.card, borderRadius: 14, padding: 4, gap: 4 }}>
+        {(["jumps", "throws"] as FieldTrainingDomain[]).map((value) => {
+          const selected = value === domain;
+          return (
+            <Pressable
+              key={value}
+              onPress={() => setDomain(value)}
+              style={{
+                flex: 1,
+                borderRadius: 10,
+                paddingVertical: 10,
+                alignItems: "center",
+                backgroundColor: selected ? c.primary : "transparent",
+              }}
+            >
+              <Text style={{ color: selected ? c.primaryText : c.text, fontWeight: "800" }}>
+                {value === "jumps" ? "Jumps" : "Throws"}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {error && <Text style={{ color: "#ef4444", fontWeight: "700" }}>{error}</Text>}
+
+      {loading ? (
+        <View style={{ paddingVertical: 24, alignItems: "center", gap: 8 }}>
+          <ActivityIndicator />
+          <Text style={{ color: c.subtext }}>Loading field stats…</Text>
+        </View>
+      ) : (
+        <>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <View style={{ flex: 1, borderWidth: 1, borderColor: c.border, backgroundColor: c.card, borderRadius: 16, padding: 14, gap: 5 }}>
+              <Text style={{ color: c.subtext, fontWeight: "700" }}>Sessions</Text>
+              <Text style={{ color: c.text, fontSize: 26, fontWeight: "900" }}>{sessionCount}</Text>
+              <Text style={{ color: c.subtext, fontSize: 12 }}>All-time {domain}</Text>
+            </View>
+            <View style={{ flex: 1, borderWidth: 1, borderColor: c.border, backgroundColor: c.card, borderRadius: 16, padding: 14, gap: 5 }}>
+              <Text style={{ color: c.subtext, fontWeight: "700" }}>Training Bests</Text>
+              <Text style={{ color: c.text, fontSize: 26, fontWeight: "900" }}>{bests.length}</Text>
+              <Text style={{ color: c.subtext, fontSize: 12 }}>Measured performance groups</Text>
+            </View>
+          </View>
+
+          <View style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.card, borderRadius: 18, padding: 16, gap: 12 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <View style={{ width: 9, height: 9, borderRadius: 999, backgroundColor: accent }} />
+              <Text style={{ color: c.text, fontSize: 17, fontWeight: "900" }}>Training Bests</Text>
+            </View>
+
+            {eventOptions.map((event) => {
+              const rows = groupedBests.get(event.value) ?? [];
+              return (
+                <View key={event.value} style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, borderRadius: 14, padding: 12, gap: 7 }}>
+                  <Text style={{ color: c.text, fontWeight: "900" }}>{event.label}</Text>
+                  {rows.length === 0 ? (
+                    <Text style={{ color: c.subtext }}>No measured training best yet.</Text>
+                  ) : (
+                    rows.map((row, index) => (
+                      <View key={`${row.event_code}-${row.implement_weight_kg ?? "none"}-${index}`} style={{ flexDirection: "row", justifyContent: "space-between", gap: 10 }}>
+                        <Text style={{ color: c.subtext }}>
+                          {domain === "throws" && row.implement_weight_kg != null
+                            ? `${Number(row.implement_weight_kg)} kg implement`
+                            : "Best valid mark"}
+                        </Text>
+                        <Text style={{ color: c.text, fontSize: 17, fontWeight: "900" }}>
+                          {row.best_mark_m != null ? `${Number(row.best_mark_m).toFixed(2)} m` : "—"}
+                        </Text>
+                      </View>
+                    ))
+                  )}
+                </View>
+              );
+            })}
+          </View>
+
+          <View style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.card, borderRadius: 18, padding: 16, gap: 10 }}>
+            <Text style={{ color: c.text, fontSize: 17, fontWeight: "900" }}>Recent {domain === "jumps" ? "Jump" : "Throw"} Sessions</Text>
+            {recent.length === 0 ? (
+              <Text style={{ color: c.subtext }}>No {domain} workouts logged yet.</Text>
+            ) : (
+              recent.map((workout) => (
+                <Pressable
+                  key={workout.id}
+                  onPress={() => router.push(`/field-workout/${workout.id}`)}
+                  style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, borderRadius: 14, padding: 12, gap: 5 }}
+                >
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 10 }}>
+                    <Text style={{ color: c.text, fontWeight: "800", flex: 1 }}>{workout.title}</Text>
+                    <Text style={{ color: c.subtext }}>{prettyDate(workout.workout_date)}</Text>
+                  </View>
+                  {!!workout.notes && <Text numberOfLines={2} style={{ color: c.subtext }}>{workout.notes}</Text>}
+                  <Text style={{ color: c.text, fontWeight: "800" }}>View attempts →</Text>
+                </Pressable>
+              ))
+            )}
+          </View>
+        </>
+      )}
+    </FormScreen>
+  );
+}
+''')
+
+          # -----------------------------------------------------------------
+          # Root navigation titles/routes.
+          # -----------------------------------------------------------------
+          path = Path('app/_layout.tsx')
+          text = path.read_text()
+          text = text.replace('title: "Track Stats",', 'title: "Running Stats",', 1)
+          marker = '''        <Stack.Screen
+          name="profile/overview"'''
+          addition = '''        <Stack.Screen
+          name="profile/field-stats"
+          options={{
+            presentation: "modal",
+            title: "Field Stats",
+            headerShown: true,
+            headerStyle: { backgroundColor: c.bg },
+            headerTintColor: c.text,
+            contentStyle: { backgroundColor: c.bg },
+          }}
+        />
+
+        <Stack.Screen
+          name="profile/overview"'''
+          if marker not in text:
+              raise SystemExit('root field-stats insertion marker missing')
+          text = text.replace(marker, addition, 1)
+          path.write_text(text)
+          PY
+
+      - name: Verify integration markers
+        run: |
+          test -f app/profile/field-stats.tsx
+          grep -q 'normalizeTrainingDomain' 'app/(tabs)/index.tsx'
+          grep -q 'weeklyStats.jumpWorkouts' 'app/(tabs)/index.tsx'
+          grep -q 'Running Stats' app/profile/track-stats.tsx
+          grep -q 'allTimeJumps' app/profile/overview.tsx
+          grep -q 'label="Jumps"' 'app/(tabs)/profile.tsx'
+          grep -q 'title="Field Stats"' app/profile/training-hub.tsx
+          grep -q 'name="profile/field-stats"' app/_layout.tsx
+
+      - name: Commit integration and cleanup
+        run: |
+          git config user.name "Amiri Prescod"
+          git config user.email "presso1717@gmail.com"
+          git rm .github/workflows/one-shot-field-surface-integration.yml
+          git add app lib docs || true
+          git commit -m "feat(field): integrate field performance surfaces"
+          git push origin HEAD:main
