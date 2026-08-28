@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import type { AssignmentOutcome } from "./training";
+import { normalizeTrainingDomain, type TrainingDomain } from "./trainingDomains";
 
 const client = supabase as any;
 
@@ -7,7 +8,7 @@ export type PersonalWorkoutCandidate = {
   id: string;
   workout_date: string;
   title: string;
-  workout_type: "track" | "lift";
+  workout_type: TrainingDomain;
   notes: string | null;
 };
 
@@ -30,7 +31,7 @@ export async function getPersonalWorkoutCandidates(date: string) {
     id: String(row.id),
     workout_date: String(row.workout_date),
     title: String(row.title),
-    workout_type: row.workout_type === "lift" ? "lift" : "track",
+    workout_type: normalizeTrainingDomain(row.workout_type),
     notes: row.notes ?? null,
   })) as PersonalWorkoutCandidate[];
 }
