@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 
-export type ExerciseScoreType = "max_weight" | "min_time" | "max_reps";
-export type ExerciseCategory = "track" | "lift" | "other";
+export type ExerciseScoreType = "max_weight" | "min_time" | "max_reps" | "max_mark";
+export type ExerciseCategory = "running" | "jumps" | "throws" | "lift" | "other";
 
 function inferDistanceM(name: string): number | null {
   const s = name.trim().toLowerCase();
@@ -59,7 +59,7 @@ export async function createCustomExercise(input: {
   if (!cleaned) throw new Error("Exercise name is required.");
 
   const distance_m =
-    input.category === "track"
+    input.category === "running"
       ? input.distance_m ?? inferDistanceM(cleaned)
       : null;
 
