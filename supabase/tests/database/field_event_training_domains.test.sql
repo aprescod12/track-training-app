@@ -141,9 +141,18 @@ select results_eq(
   array[3::bigint],
   'assigned coach can see team-context jump attempts'
 );
-select throws_ok(
-  $$update public.field_attempts set mark_m = 6.60 where entry_id = current_setting('test.field_jump_entry_id')::uuid and attempt_number = 1$$,
-  '42501', null,
+select results_eq(
+  $$
+    with updated as (
+      update public.field_attempts
+      set mark_m = 6.60
+      where entry_id = current_setting('test.field_jump_entry_id')::uuid
+        and attempt_number = 1
+      returning 1
+    )
+    select count(*) from updated
+  $$,
+  array[0::bigint],
   'coach cannot edit athlete-owned field attempt'
 );
 

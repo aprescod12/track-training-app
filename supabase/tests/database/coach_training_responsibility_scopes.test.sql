@@ -95,8 +95,8 @@ select results_eq(
       and can_prescribe
       and can_review
   $$,
-  array[2::bigint],
-  'team creator coach starts with Track and Lift authority'
+  array[4::bigint],
+  'team creator coach starts with Running, Jumps, Throws, and Lift authority'
 );
 
 select results_eq(
