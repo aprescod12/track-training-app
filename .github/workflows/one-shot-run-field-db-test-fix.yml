@@ -1,0 +1,32 @@
+name: One-shot run field database test fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-shot-run-field-db-test-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply database test repair
+        run: python3 scripts/one-shot-field-db-test-fix.py
+      - name: Verify repair
+        run: |
+          grep -q 'array\[4::bigint\]' supabase/tests/database/coach_training_responsibility_scopes.test.sql
+          grep -q 'with updated as' supabase/tests/database/field_event_training_domains.test.sql
+      - name: Commit repair and cleanup
+        run: |
+          git config user.name "Amiri Prescod"
+          git config user.email "presso1717@gmail.com"
+          git rm scripts/one-shot-field-db-test-fix.py .github/workflows/one-shot-run-field-db-test-fix.yml
+          git add supabase/tests/database/coach_training_responsibility_scopes.test.sql supabase/tests/database/field_event_training_domains.test.sql
+          git commit -m "test(field): align four-domain authorization expectations"
+          git push origin HEAD:main
